@@ -132,3 +132,28 @@ def test_cli_runs(argv, capsys):
 def test_cli_reports_errors(capsys):
     assert main(["dromos", "xyz"]) == 1
     assert "Unknown dromos" in capsys.readouterr().err
+
+
+def test_gui_builds_every_view():
+    tk = pytest.importorskip("tkinter")
+    try:
+        from maqam_builder.gui import App
+        app = App()
+    except tk.TclError:
+        pytest.skip("no display")
+    try:
+        app.show("main")
+        for mode, names in (("Dromos", DROMOI), ("Makam", MAKAMS)):
+            app.mode.set(mode)
+            app._mode_changed()
+            for item in names.values():
+                app.name.set(item.name)
+                app.run()
+                assert "error" not in app.output.tag_names("1.0")
+        app.mode.set("Identify")
+        app._mode_changed()
+        app.notes.insert(0, "D Eb F# G")
+        app.run()
+        assert "Hitzaz" in app.output.get("1.0", "end")
+    finally:
+        app.destroy()

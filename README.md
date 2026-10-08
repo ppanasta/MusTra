@@ -15,9 +15,43 @@ Given a name you get the notes; given the first notes you get the name.
 | Spelling | `B♭¹` = B lowered by 1 koma, `F♯⁴` = F raised by 4 komas | `E♭`, `F♯` as usual |
 | Extras | perde names (Rast, Dügah, Segah…), AEU step names (K, B, S, M, T, A) | Greek solfège (Ρε, Μι♭…) |
 
-## Usage
+## Download and run (no Python needed)
 
-Python 3.10+, no dependencies.
+Ready-made programs are built automatically by GitHub Actions
+(`.github/workflows/build.yml`) for every push:
+
+| System | File | How to open |
+|---|---|---|
+| Windows | `MaqamBuilder-windows.exe` | double-click (if SmartScreen warns: *More info → Run anyway*) |
+| macOS | `MaqamBuilder-macos.zip` | unzip, then right-click `MaqamBuilder.app` → *Open* the first time |
+| Linux | `MaqamBuilder-linux` | `chmod +x MaqamBuilder-linux && ./MaqamBuilder-linux` |
+
+Get them from the repository's **Actions** tab (open the latest *Build
+executables* run → *Artifacts*), or from **Releases** once a version tag
+such as `v1.0.0` is pushed. Each is a single portable file: nothing to install.
+
+The program opens on a welcome page with instructions, Start/End buttons
+and the list of references (clickable). Start leads to the lookup page:
+choose **Dromos**, **Makam** or **Identify**, pick a name, optionally a
+tonic, and the notes, makam comparison and playing tips appear.
+
+The same file also works as a command-line tool when given arguments, e.g.
+`MaqamBuilder-windows.exe dromos ousak`.
+
+### Building it yourself
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed --name MaqamBuilder run_gui.py   # -> dist/
+```
+
+PyInstaller builds for the system it runs on, so build the Windows `.exe` on
+Windows (or let the workflow do it).
+
+## Command line (from source)
+
+Python 3.10+, no dependencies. `python -m maqam_builder` with no arguments
+opens the window.
 
 ```bash
 python -m maqam_builder list                      # all dromoi and makams

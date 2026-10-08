@@ -1,0 +1,70 @@
+name: Build executables
+
+# Builds a stand-alone program (no Python needed) for Windows, macOS and Linux.
+# Every push uploads the files as workflow artifacts; pushing a tag like v1.0.0
+# also attaches them to a GitHub Release.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: MaqamBuilder-windows.exe
+          - os: macos-latest
+            asset: MaqamBuilder-macos.zip
+          - os: ubuntu-latest
+            asset: MaqamBuilder-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install pyinstaller pytest
+
+      - name: Run tests (Linux, with a virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest -q
+
+      - name: Run tests
+        if: runner.os != 'Linux'
+        run: python -m pytest -q
+
+      - name: Build
+        run: pyinstaller --onefile --windowed --name MaqamBuilder run_gui.py
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: Move-Item dist/MaqamBuilder.exe ${{ matrix.asset }}
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/MaqamBuilder.app ${{ matrix.asset }}
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: mv dist/MaqamBuilder ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset }}
