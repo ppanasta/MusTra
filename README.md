@@ -38,6 +38,10 @@ tonic, and the notes, makam comparison and playing tips appear.
 The same file also works as a command-line tool when given arguments, e.g.
 `MaqamBuilder-windows.exe dromos ousak`.
 
+To write the text of a release, add `release-notes/<tag>.md` (e.g.
+`release-notes/v1.1.0.md`) and push: the *Release notes* workflow copies it
+into the GitHub Release with that tag.
+
 ### Building it yourself
 
 ```bash
