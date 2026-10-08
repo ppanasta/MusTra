@@ -1,0 +1,33 @@
+name: Release notes
+
+# Copies release-notes/<tag>.md into the text of the GitHub Release <tag>.
+# Edit or add a file in release-notes/ and push; releases that do not exist
+# yet are skipped (the notes are applied on the next push after they exist).
+on:
+  push:
+    paths: ["release-notes/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update release text
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          for file in release-notes/v*.md; do
+            tag=$(basename "$file" .md)
+            if gh release view "$tag" > /dev/null 2>&1; then
+              gh release edit "$tag" --notes-file "$file"
+              echo "Updated $tag"
+            else
+              echo "No release $tag yet, skipping"
+            fi
+          done
