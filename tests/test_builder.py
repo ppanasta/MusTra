@@ -134,8 +134,9 @@ def test_cli_reports_errors(capsys):
     assert "Unknown dromos" in capsys.readouterr().err
 
 
-def test_gui_builds_every_view():
+def test_gui_builds_every_view(monkeypatch, tmp_path):
     tk = pytest.importorskip("tkinter")
+    monkeypatch.setenv("MAQAM_BUILDER_DB", str(tmp_path / "gui.sqlite3"))
     try:
         from maqam_builder.gui import App
         app = App()
@@ -150,6 +151,25 @@ def test_gui_builds_every_view():
                 app.name.set(item.name)
                 app.run()
                 assert "error" not in app.output.tag_names("1.0")
+        # song panel: suggestion, report with a replacement song, new suggestion
+        app.mode.set("Dromos")
+        app._mode_changed()
+        app.name.set("Sabah")
+        app.run()
+        song = app.song_shown
+        assert song is not None and song.scale == "sabah"
+        app.store.report(song.id, "dromos", "houzam", "test")
+        app._fill_song_panel(song=app.store.get(song.id))
+        assert app.song_shown.reports == {("dromos", "houzam"): 1}
+        app._fill_song_panel(pick=True)
+        app._report_dialog()
+        dialogs = [w for w in app.winfo_children() if isinstance(w, tk.Toplevel)]
+        assert dialogs
+        for d in dialogs:
+            d.destroy()
+        app._suggest_dialog()
+        for d in [w for w in app.winfo_children() if isinstance(w, tk.Toplevel)]:
+            d.destroy()
         app.mode.set("Identify")
         app._mode_changed()
         app.notes.insert(0, "D Eb F# G")

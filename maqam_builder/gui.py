@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import sqlite3
 import tkinter as tk
 import webbrowser
+from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 from tkinter import ttk
 
 from . import builder
 from .data import DROMOI, MAKAMS
+from .songs import Song, SongStore, scale_name
 
 # Purple palette
 BG = "#F7F3FC"
@@ -38,6 +41,12 @@ REFERENCES = [
      "https://en.wikipedia.org/wiki/Holdrian_comma"),
     ("Wikipedia — 53 equal temperament",
      "https://en.wikipedia.org/wiki/53_equal_temperament"),
+    ("Song lists — Λαϊκοί Δρόμοι, Ρεπερτόριο 164 τραγουδιών (kithara.gr)",
+     "https://forum.kithara.gr/index.php?topic=84181.0"),
+    ("Song lists — 170 τίτλοι των λαϊκών μας δρόμων (rembetiko.gr)",
+     "https://rembetiko.gr/t/170-%CF%84%CE%AF%CF%84%CE%BB%CE%BF%CE%B9-%CF%84%CF%89%CE%BD-"
+     "%CE%BB%CE%B1%CF%8A%CE%BA%CF%8E%CE%BD-%CE%BC%CE%B1%CF%82-%CE%B4%CF%81%CF%8C%CE%BC%CF%89%CE%BD/10892"),
+    ("Song lists — SalihBora.com, works by makam", "https://www.salihbora.com/makam/hicaz/"),
 ]
 
 STEPS = [
@@ -50,6 +59,10 @@ STEPS = [
     "original makam beside the dromos, and the playing tips.",
     "In the tips, ↑ means bend the note up and ↓ means hold it low. "
     "A koma accidental like B♭¹ means B lowered by one koma (≈ 23 cents).",
+    "Under each dromos and makam you get a song suggestion drawn from the "
+    "literature. Press Another song for a new one. If a song is in the wrong "
+    "dromos/makam, press Wrong dromos? to give the right one and suggest a "
+    "better song. Your corrections are saved on this computer.",
     "Back returns to this page; End closes the program.",
 ]
 
@@ -86,8 +99,12 @@ class App(tk.Tk):
             "heading": (base, 14, "bold"),
             "body": (base, 11),
             "small": (base, 10),
+            "song": (base, 15, "bold"),
         }
         self._style()
+        self._store: SongStore | None = None
+        self.song_shown: Song | None = None
+        self.songs_seen: set[int] = set()
 
         self.pages = {"welcome": self._welcome(), "main": self._main()}
         self.current = "welcome"
@@ -105,6 +122,17 @@ class App(tk.Tk):
         target = self.welcome_canvas if self.current == "welcome" else self.output
         target.yview_scroll(units * 2, "units")
 
+    @property
+    def store(self) -> SongStore:
+        if self._store is None:
+            self._store = SongStore()
+        return self._store
+
+    def destroy(self) -> None:
+        if self._store is not None:
+            self._store.close()
+        super().destroy()
+
     # -- styling -----------------------------------------------------------
     def _style(self) -> None:
         style = ttk.Style(self)
@@ -121,6 +149,12 @@ class App(tk.Tk):
                             font=(self.fonts["body"][0], 11, "bold"))
             style.map(name, background=[("active", active)],
                       foreground=[("active", "white" if fg == "white" else PRIMARY_DARK)])
+        style.configure("Small.TButton", background=PRIMARY_LIGHT, foreground=PRIMARY_DARK,
+                        borderwidth=0, focuscolor=PRIMARY_LIGHT, padding=(10, 4),
+                        font=(self.fonts["body"][0], 10, "bold"))
+        style.map("Small.TButton", background=[("active", "#D9C8F0")])
+        style.configure("Dialog.TRadiobutton", background=CARD, foreground=TEXT)
+        style.map("Dialog.TRadiobutton", background=[("active", CARD)])
         style.configure("Mode.TRadiobutton", background=PRIMARY_LIGHT,
                         foreground=PRIMARY_DARK, padding=(14, 6), indicatorsize=0,
                         font=(self.fonts["body"][0], 11, "bold"))
@@ -353,6 +387,7 @@ class App(tk.Tk):
         parent = MAKAMS[dromos.makam].name if dromos.makam else None
         origin = f"From makam {parent}." if parent else "Greek-born, no makam parent."
         self._write(f"{dromos.description}  {origin}\n", "muted")
+        self._song_panel("dromos", builder.find_dromos(name)[0])
 
         directions = ["asc", "desc"] if dromos.descending else ["asc"]
         for direction in directions:
@@ -408,6 +443,7 @@ class App(tk.Tk):
         self._write(f"Makam {makam.name}\n", "title")
         self._write(f"{makam.description}\nSeyir: {makam.seyir}  ·  güçlü (dominant): "
                     f"degree {makam.guclu + 1}\n", "muted")
+        self._song_panel("makam", builder.find_makam(name)[0])
         for direction in ("asc", "desc"):
             notes = builder.build_makam(name, tonic, direction, a4).notes
             label = "Ascending" if direction == "asc" else "Descending"
@@ -421,6 +457,234 @@ class App(tk.Tk):
                      f"{n.cents:.1f}", f"{n.frequency:.2f}") for n in notes]
             self._table(columns, rows)
         self._write(LEGEND + "\n", "small")
+
+    # -- songs -------------------------------------------------------------
+    def _song_panel(self, kind: str, scale: str) -> None:
+        """A card with a suggested song, actions, and the list of songs."""
+        panel = tk.Frame(self.output, bg=PRIMARY_LIGHT, padx=16, pady=12)
+        self.song_panel = panel
+        self.song_scale = (kind, scale)
+        self.songs_seen = set()
+        self.output.window_create("end", window=panel, padx=0, pady=8)
+        self._write("\n")
+        self._fill_song_panel(pick=True)
+
+    def _fill_song_panel(self, pick: bool = False, song: Song | None = None) -> None:
+        panel = self.song_panel
+        for child in panel.winfo_children():
+            child.destroy()
+        kind, scale = self.song_scale
+        name = scale_name(kind, scale)
+        label = lambda text, font="body", fg=TEXT, **kw: self._label(  # noqa: E731
+            panel, text, font, fg, PRIMARY_LIGHT, **kw)
+
+        try:
+            songs = self.store.songs_for(kind, scale)
+            related = self.store.related(kind, scale)
+            if pick:
+                song = self.store.suggest(kind, scale, self.songs_seen)
+        except sqlite3.Error as exc:
+            label(f"The song database could not be opened: {exc}", fg=ERROR).pack(anchor="w")
+            return
+        self.song_shown = song
+        if song:
+            self.songs_seen.add(song.id)
+
+        label(f"♪  Song suggestion for {name}", "heading", PRIMARY_DARK).pack(anchor="w")
+        if song is None:
+            label("No songs yet for this one — be the first to suggest one.",
+                  fg=MUTED).pack(anchor="w", pady=(4, 0))
+        else:
+            label(song.title, "song").pack(anchor="w", pady=(4, 0))
+            details = "  ·  ".join(str(x) for x in (
+                song.artist, song.year, song.rhythm,
+                song.song_key and f"on {song.song_key}") if x)
+            if details:
+                label(details, fg=MUTED).pack(anchor="w")
+            if (song.kind, song.scale) != (kind, scale) and not song.via_report:
+                label(f"From the related {song.kind} {scale_name(song.kind, song.scale)}.",
+                      "small", MUTED).pack(anchor="w")
+            if song.via_report:
+                label(f"Listed under {scale_name(song.kind, song.scale)}; users say it "
+                      f"belongs to {name}.", "small", ERROR).pack(anchor="w")
+            for (rkind, rscale), n in song.reports.items():
+                who = "1 user says" if n == 1 else f"{n} users say"
+                label(f"⚠  {who} it is really {rkind} {scale_name(rkind, rscale)}.",
+                      "small", ERROR).pack(anchor="w")
+            origin = "Suggested by a user" if song.origin == "user" else "Source"
+            src = label(f"{origin}: {song.source}", "small",
+                        LINK if song.source_url else MUTED,
+                        cursor="hand2" if song.source_url else "")
+            src.pack(anchor="w", pady=(4, 0))
+            if song.source_url:
+                src.configure(font=self.fonts["small"] + ("underline",))
+                src.bind("<Button-1>", lambda e, u=song.source_url: webbrowser.open(u))
+
+        buttons = tk.Frame(panel, bg=PRIMARY_LIGHT)
+        buttons.pack(anchor="w", pady=(10, 4))
+        total = len(songs)
+        for text, command, enabled in (
+            ("Another song", lambda: self._fill_song_panel(pick=True), total > 1),
+            (f"Wrong {kind}?", self._report_dialog, song is not None),
+            ("Suggest a song", self._suggest_dialog, True),
+            ("Export my contributions", self._export, True),
+        ):
+            b = ttk.Button(buttons, text=text, style="Small.TButton", command=command)
+            b.pack(side="left", padx=(0, 6))
+            if not enabled:
+                b.state(["disabled"])
+
+        rows = [(s, "") for s in songs] + [(s, scale_name(s.kind, s.scale)) for s in related]
+        if rows:
+            label(f"All songs ({total} here, {len(related)} related) — click one to "
+                  "show it above", "small", MUTED).pack(anchor="w", pady=(6, 2))
+            tree = ttk.Treeview(panel, columns=("Title", "Artist", "Year", "From", "Reports"),
+                                show="headings", height=min(len(rows), 6),
+                                style="Result.Treeview", selectmode="browse")
+            for col, width in (("Title", 270), ("Artist", 170), ("Year", 56),
+                               ("From", 110), ("Reports", 76)):
+                tree.heading(col, text=col, anchor="w")
+                tree.column(col, width=width, anchor="w", stretch=False)
+            by_iid = {}
+            for s_, origin in rows:
+                iid = tree.insert("", "end", values=(
+                    s_.title, s_.artist, s_.year or "",
+                    origin or ("users" if s_.via_report else name),
+                    sum(s_.reports.values()) or ""))
+                by_iid[iid] = s_
+            tree.bind("<<TreeviewSelect>>", lambda e: tree.selection() and
+                      self._fill_song_panel(song=by_iid[tree.selection()[0]]))
+            if len(rows) <= 6:
+                tree.bind("<MouseWheel>", self._wheel)
+                tree.bind("<Button-4>", self._wheel)
+                tree.bind("<Button-5>", self._wheel)
+            tree.pack(anchor="w")
+
+    def _dialog(self, title: str) -> tuple[tk.Toplevel, tk.Frame]:
+        win = tk.Toplevel(self, bg=CARD)
+        win.title(title)
+        win.transient(self)
+        win.resizable(False, False)
+        body = tk.Frame(win, bg=CARD, padx=24, pady=20)
+        body.pack(fill="both", expand=True)
+        self._label(body, title, "heading", PRIMARY_DARK, CARD).pack(anchor="w", pady=(0, 8))
+        return win, body
+
+    def _scale_picker(self, parent, kind: str, scale: str):
+        """Dromos/Makam radio + combobox; returns a function giving (kind, key)."""
+        row = tk.Frame(parent, bg=CARD)
+        row.pack(anchor="w", pady=(2, 8))
+        kind_var = tk.StringVar(value=kind)
+        combo = ttk.Combobox(row, width=24, state="readonly")
+
+        def refill(*_):
+            table = DROMOI if kind_var.get() == "dromos" else MAKAMS
+            combo.configure(values=[i.name for i in table.values()])
+            current = table.get(scale) if kind_var.get() == kind else None
+            combo.set(current.name if current else next(iter(table.values())).name)
+
+        for value, text in (("dromos", "Greek dromos"), ("makam", "Turkish makam")):
+            ttk.Radiobutton(row, text=text, value=value, variable=kind_var,
+                            style="Dialog.TRadiobutton", command=refill).pack(side="left")
+        combo.pack(side="left", padx=(10, 0))
+        refill()
+
+        def value() -> tuple[str, str]:
+            if kind_var.get() == "dromos":
+                return "dromos", builder.find_dromos(combo.get())[0]
+            return "makam", builder.find_makam(combo.get())[0]
+        return value, combo
+
+    def _entry(self, parent, label: str, width: int = 40) -> ttk.Entry:
+        self._label(parent, label, "small", MUTED, CARD).pack(anchor="w")
+        entry = ttk.Entry(parent, width=width)
+        entry.pack(anchor="w", pady=(0, 8))
+        return entry
+
+    def _dialog_buttons(self, win, body, on_save) -> tk.Label:
+        error = self._label(body, "", "small", ERROR, CARD)
+        error.pack(anchor="w")
+        row = tk.Frame(body, bg=CARD)
+        row.pack(anchor="e", pady=(8, 0))
+
+        def save():
+            try:
+                on_save()
+            except (KeyError, ValueError, sqlite3.Error) as exc:
+                error.configure(text=str(exc.args[0] if exc.args else exc))
+                return
+            win.destroy()
+
+        ttk.Button(row, text="Cancel", style="Ghost.TButton",
+                   command=win.destroy).pack(side="right")
+        ttk.Button(row, text="Save", style="Primary.TButton",
+                   command=save).pack(side="right", padx=8)
+        win.bind("<Escape>", lambda e: win.destroy())
+        win.grab_set()
+        return error
+
+    def _report_dialog(self) -> None:
+        song = self.song_shown
+        if song is None:
+            return
+        kind, scale = self.song_scale
+        win, body = self._dialog("Wrong dromos / makam?")
+        self._label(body, f"“{song.title}” is listed under "
+                          f"{scale_name(song.kind, song.scale)}. It actually is:",
+                    bg=CARD, wraplength=460).pack(anchor="w")
+        picked, _ = self._scale_picker(body, kind, scale)
+        comment = self._entry(body, "Why? (optional — e.g. where you read it, or what you hear)", 56)
+        self._label(body, f"Suggest a more suitable song for {scale_name(kind, scale)} "
+                          "(optional)", bg=CARD).pack(anchor="w", pady=(8, 2))
+        title = self._entry(body, "Song title")
+        artist = self._entry(body, "Composer / performer")
+
+        def save():
+            new_kind, new_scale = picked()
+            self.store.report(song.id, new_kind, new_scale, comment.get())
+            if title.get().strip():
+                self.store.add_song(title.get(), kind, scale, artist=artist.get())
+            self._fill_song_panel(song=self.store.get(song.id))
+
+        self._dialog_buttons(win, body, save)
+
+    def _suggest_dialog(self) -> None:
+        kind, scale = self.song_scale
+        win, body = self._dialog("Suggest a song")
+        title = self._entry(body, "Song title", 48)
+        artist = self._entry(body, "Composer / performer", 48)
+        year = self._entry(body, "Year (optional)", 10)
+        self._label(body, "It is in", bg=CARD).pack(anchor="w")
+        picked, _ = self._scale_picker(body, kind, scale)
+        source = self._entry(body, "Source (optional — book, record, link)", 48)
+
+        def save():
+            text = year.get().strip()
+            if text and not text.isdigit():
+                raise ValueError("Year must be a number, e.g. 1936.")
+            new_kind, new_scale = picked()
+            song_id = self.store.add_song(title.get(), new_kind, new_scale,
+                                          artist=artist.get(),
+                                          year=int(text) if text else None,
+                                          source=source.get())
+            if (new_kind, new_scale) == (kind, scale):
+                self._fill_song_panel(song=self.store.get(song_id))
+            else:
+                self._fill_song_panel(song=self.song_shown)
+
+        self.after(50, title.focus_set)
+        self._dialog_buttons(win, body, save)
+
+    def _export(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Export my contributions", defaultextension=".json",
+            initialfile="maqam_builder_contributions.json",
+            filetypes=[("JSON", "*.json")])
+        if path:
+            data = self.store.export_json(path)
+            messagebox.showinfo(
+                "Exported", f"Saved {len(data['songs'])} song suggestion(s) and "
+                f"{len(data['reports'])} report(s) to\n{path}", parent=self)
 
     def _show_identify(self, notes: list[str]) -> None:
         if not notes:
