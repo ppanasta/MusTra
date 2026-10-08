@@ -81,6 +81,57 @@ Tips — playing the dromos so it moves like the makam:
     and Kiourdi.
 ```
 
+## Song suggestions
+
+Every dromos and makam page suggests a song in that dromos/makam, taken
+from the literature (each with its source, clickable in the app):
+Greek rebetiko repertoire lists that give each song's dromos and key
+([kithara.gr](https://forum.kithara.gr/index.php?topic=84181.0),
+[rembetiko.gr](https://rembetiko.gr/)), and Turkish works-by-makam
+collections and references (SalihBora.com, TDV İslâm Ansiklopedisi, …).
+The seed list is in `maqam_builder/songs_seed.py`.
+
+Users can correct it:
+
+* **Wrong dromos?** Say which dromos or makam the song is really in, and
+  optionally suggest a more suitable song. The song then also shows up
+  under the scale the user named, marked as a user correction, and it is
+  suggested less often under the disputed one.
+* **Suggest a song** for any dromos or makam, with an optional source.
+* **Export my contributions** writes your suggestions and reports to a JSON
+  file you can share, for example to improve the seed list.
+
+From the command line:
+
+```bash
+python -m maqam_builder songs hitzaz              # suggestion + all songs (ids in [brackets])
+python -m maqam_builder songs hicaz --makam
+python -m maqam_builder report 17 --dromos houzam --comment "heard it on the record"
+python -m maqam_builder add-song "Title" --dromos ousak --artist "Composer" --year 1936
+python -m maqam_builder export my_contributions.json
+```
+
+### Where the data lives
+
+A **SQLite** database (`songs.sqlite3`): SQLite is built into Python, so the
+executable stays a single file, and it stores the songs ↔ reports relation
+with real queries. It is created on first use in the user's data folder:
+
+| System | Location |
+|---|---|
+| Windows | `%APPDATA%\MaqamBuilder\songs.sqlite3` |
+| macOS | `~/Library/Application Support/MaqamBuilder/songs.sqlite3` |
+| Linux | `~/.local/share/MaqamBuilder/songs.sqlite3` |
+
+Set `MAQAM_BUILDER_DB` (or `--db` on the command line) to use another file.
+New literature songs from an updated version are added on start without
+touching the user's own data.
+
+The limitation: each computer keeps its own reports. Sharing corrections
+between all users would need a small shared server (for example a hosted
+database behind an API). Until then, the JSON export is the way to collect
+contributions.
+
 ## How the tips are made
 
 For each dromos, the parent makam is transposed onto the dromos tonic and
