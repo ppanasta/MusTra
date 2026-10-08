@@ -50,7 +50,7 @@ INTERVAL_NAMES = {
 
 _SUPERSCRIPT = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
 _NOTE_RE = re.compile(r"^([A-Ga-g])([#b♯♭]*)([+-]\d+)?$")
-_ET_ACCIDENTALS = {0: "", 1: "♯", 2: "𝄪", -1: "♭", -2: "𝄫"}
+_ET_ACCIDENTALS = {0: "", 1: "♯", 2: "♯♯", -1: "♭", -2: "♭♭"}
 
 
 def _wrap(value: int, modulus: int) -> int:
