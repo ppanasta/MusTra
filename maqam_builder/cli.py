@@ -6,7 +6,7 @@ import argparse
 import sys
 import textwrap
 
-from . import builder
+from . import arabic, builder, pitch
 from .data import DROMOI, MAKAMS
 
 LEGEND = ("Koma accidentals: ♭¹ = one koma (≈23¢) flat, ♯⁴ = four komas sharp, "
@@ -34,6 +34,20 @@ def _wrap(text: str, indent: str = "    ") -> str:
                          subsequent_indent=indent + "  ")
 
 
+def _equivalents_line(kind: str, key: str) -> str:
+    eq = arabic.equivalents(kind, key)
+    parts = []
+    if kind != "arabic" and eq.arabic:
+        parts.append("Arabic " + ", ".join(
+            f"{arabic.MAQAMAT[k].name} ({arabic.MAQAMAT[k].arabic})" for k in eq.arabic))
+    if kind != "makam" and eq.makams:
+        parts.append("Turkish " + ", ".join(MAKAMS[k].name for k in eq.makams))
+    if kind != "dromos" and eq.dromoi:
+        parts.append("Greek " + ", ".join(f"{DROMOI[k].name} ({DROMOI[k].greek})"
+                                          for k in eq.dromoi))
+    return "Equivalents: " + ("  ·  ".join(parts) if parts else "none")
+
+
 def cmd_list(_args) -> None:
     print("Greek dromoi (12-TET):")
     for key, d in DROMOI.items():
@@ -42,12 +56,17 @@ def cmd_list(_args) -> None:
     print("\nTurkish makams (53-koma):")
     for key, m in MAKAMS.items():
         print(f"  {key:<12} {m.name:<10} on {m.tonic:<4} steps {'-'.join(map(str, m.steps))}")
+    print("\nArabic maqamat (24 quarter tones):")
+    for key, a in arabic.MAQAMAT.items():
+        print(f"  {key:<12} {a.name:<12} {a.arabic:<12} on {a.tonic:<3} ← makam "
+              f"{MAKAMS[a.makam].name}")
 
 
 def cmd_makam(args) -> None:
     _, makam = builder.find_makam(args.name)
     print(f"Makam {makam.name}: {makam.description}")
     print(f"Seyir: {makam.seyir}; güçlü (dominant): degree {makam.guclu + 1}")
+    print(_equivalents_line("makam", builder.find_makam(args.name)[0]))
     directions = ["asc", "desc"] if makam.descending or args.both else ["asc"]
     for direction in directions:
         _print_makam(builder.build_makam(args.name, args.tonic, direction, args.a4), makam)
@@ -57,6 +76,7 @@ def cmd_makam(args) -> None:
 def cmd_dromos(args) -> None:
     _, dromos = builder.find_dromos(args.name)
     print(f"Dromos {dromos.name} ({dromos.greek}): {dromos.description}")
+    print(_equivalents_line("dromos", builder.find_dromos(args.name)[0]))
     directions = ["asc", "desc"] if dromos.descending else ["asc"]
     for direction in directions:
         _print_dromos(builder.build_dromos(args.name, args.tonic, direction, args.a4))
@@ -67,9 +87,19 @@ def cmd_dromos(args) -> None:
         print(f"\nOriginal makam {makam.name} transposed to {tonic}, for comparison:")
         mk = sorted(builder.build_makam(dromos.makam, tonic).notes, key=lambda n: n.degree)
         dr = sorted(builder.build_dromos(args.name, args.tonic).notes, key=lambda n: n.degree)
-        print(f"{'Deg':>3}  {'Fret':<6} {'Makam':<6} {'Δ cents':>8}")
-        for d, m in zip(dr, mk):
-            print(f"{d.degree:>3}  {d.name:<6} {m.name:<6} {m.cents - d.cents:>+8.0f}")
+        arab = arabic.arabic_for("dromos", builder.find_dromos(args.name)[0])
+        ar = [None] * len(dr)
+        if arab:
+            ar = sorted(arabic.build(arab.name, tonic),
+                        key=lambda n: n.degree)
+            print(f"(Arabic column: maqam {arab.name}, in quarter tones)")
+        print(f"{'Deg':>3}  {'Fret':<6} {'Makam':<6} {'Δ cents':>8}"
+              + (f"   {'Arabic':<7} {'Δ cents':>8}" if arab else ""))
+        for d, m, a in zip(dr, mk, ar):
+            line = f"{d.degree:>3}  {d.name:<6} {m.name:<6} {m.cents - d.cents:>+8.0f}"
+            if a:
+                line += f"   {a.name:<7} {a.cents - d.cents:>+8.0f}"
+            print(line)
 
     print("\nTips — playing the dromos so it moves like the makam:")
     for direction in directions:
@@ -92,6 +122,43 @@ def cmd_identify(args) -> None:
     result = builder.identify(args.notes)
     print("Dromoi:", ", ".join(result["dromoi"]) or "none")
     print("Makams:", ", ".join(result["makams"]) or "none")
+    print("Arabic:", ", ".join(result["arabic"]) or "none")
+
+
+def cmd_arabic(args) -> None:
+    key, maqam = arabic.find_maqam(args.name)
+    print(f"Maqam {maqam.name} ({maqam.arabic}): {maqam.description}")
+    print(f"Ghammaz (dominant): degree {maqam.ghammaz + 1}")
+    print(_equivalents_line("arabic", key))
+    tonic = args.tonic or maqam.tonic
+    directions = ["asc", "desc"] if maqam.descending else ["asc"]
+    for direction in directions:
+        notes = arabic.build(key, tonic, direction, args.a4)
+        print(f"\nMaqam {maqam.name} — tonic {tonic}, {direction}ending")
+        print(f"{'Deg':>3}  {'Note':<7} {'Name':<10} {'Step':<12} {'Cents':>6} {'Hz':>8}")
+        for n in notes:
+            print(f"{n.degree:>3}  {n.name:<7} {n.arabic_name:<10} {n.step:<12}"
+                  f"{n.cents:>6.0f} {n.frequency:>8.2f}")
+
+    turkish = MAKAMS[maqam.makam]
+    eq = arabic.equivalents("arabic", key)
+    print(f"\nCompared with makam {turkish.name}"
+          + (f" and dromos {', '.join(DROMOI[k].name for k in eq.dromoi)}" if eq.dromoi else "")
+          + f" on the same tonic (cents above the tonic):")
+    ar = sorted(arabic.build(key, tonic), key=lambda n: n.degree)
+    mk = builder.makam_positions(turkish)
+    header = f"{'Deg':>3}  {'Arabic':>7} {'Turkish':>8}"
+    dromoi = [DROMOI[k] for k in eq.dromoi]
+    for d in dromoi:
+        header += f" {d.name[:9]:>9}"
+    print(header)
+    for i, a in enumerate(ar):
+        line = f"{a.degree:>3}  {a.cents:>7.0f} {mk[i] * pitch.KOMA_CENTS:>8.0f}"
+        for d in dromoi:
+            line += f" {builder.dromos_positions(d)[i] * 100:>9.0f}"
+        print(line)
+    print("\nQuarter-tone accidentals: ½♭ = half-flat, ½♯ = half-sharp (50¢). "
+          "Arabic intonation of the half-flat notes varies by region.")
 
 
 def _scale_args(args) -> tuple[str, str]:
@@ -193,6 +260,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("name")
     p.add_argument("--tonic", help="transpose, e.g. E, A, F#")
     p.set_defaults(func=cmd_dromos)
+
+    p = sub.add_parser("arabic", help="show an Arabic maqam and its equivalents")
+    p.add_argument("name")
+    p.add_argument("--tonic", help="transpose, e.g. C, D, Ed (E half-flat), Bb")
+    p.set_defaults(func=cmd_arabic)
 
     p = sub.add_parser("identify", help="name the dromos/makam from its first notes")
     p.add_argument("notes", nargs="+", help="tonic first, e.g. D Eb F#")
