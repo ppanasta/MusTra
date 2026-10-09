@@ -9,7 +9,8 @@ from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 from tkinter import ttk
 
-from . import builder
+from . import arabic, builder
+from .cli import _equivalents_line
 from .data import DROMOI, MAKAMS
 from .songs import Song, SongStore, scale_name
 
@@ -41,6 +42,10 @@ REFERENCES = [
      "https://en.wikipedia.org/wiki/Holdrian_comma"),
     ("Wikipedia — 53 equal temperament",
      "https://en.wikipedia.org/wiki/53_equal_temperament"),
+    ("Wikipedia — Arabic maqam (24-tone notation, maqam families)",
+     "https://en.wikipedia.org/wiki/Arabic_maqam"),
+    ("Maqam World — Arabic maqamat and ajnas (Farraj & Abu Shumays)",
+     "https://www.maqamworld.com/"),
     ("Song lists — Λαϊκοί Δρόμοι, Ρεπερτόριο 164 τραγουδιών (kithara.gr)",
      "https://forum.kithara.gr/index.php?topic=84181.0"),
     ("Song lists — 170 τίτλοι των λαϊκών μας δρόμων (rembetiko.gr)",
@@ -51,8 +56,9 @@ REFERENCES = [
 
 STEPS = [
     "Press Start.",
-    "Choose what to look up: Dromos (Greek), Makam (Turkish), or Identify "
-    "(type notes, get the name).",
+    "Choose what to look up: Dromos (Greek), Makam (Turkish), Arabic (Arabic "
+    "maqam, in quarter tones) or Identify (type notes, get the name). Every page "
+    "names the equivalent scales in the other two traditions.",
     "Pick a name from the list. Optionally type a tonic: D, A, F#, Eb … "
     "(for makams also B-1 = B lowered by one koma).",
     "Press Show. You get the notes with Greek names, cents and Hz, the "
@@ -66,7 +72,7 @@ STEPS = [
     "Back returns to this page; End closes the program.",
 ]
 
-MODES = ("Dromos", "Makam", "Identify")
+MODES = ("Dromos", "Makam", "Arabic", "Identify")
 
 # Fonts with Greek, ♯/♭, superscripts and arrows; the first one installed wins.
 UI_FONTS = ("Segoe UI", "SF Pro Text", "Helvetica Neue", "Inter", "Noto Sans",
@@ -297,6 +303,8 @@ class App(tk.Tk):
             "title": dict(foreground=PRIMARY_DARK, font=(self.fonts["body"][0], 18, "bold"),
                           spacing3=2),
             "muted": dict(foreground=MUTED, spacing3=6),
+            "equiv": dict(foreground=PRIMARY, font=(self.fonts["body"][0], 11, "bold"),
+                          spacing3=6),
             "heading": dict(foreground=PRIMARY_DARK, font=self.fonts["heading"],
                             spacing1=14, spacing3=6),
             "tip": dict(lmargin1=4, lmargin2=24, spacing1=3, spacing3=3),
@@ -321,21 +329,24 @@ class App(tk.Tk):
             self.tonic_label.grid_remove()
             self.notes.grid(row=1, column=0, sticky="w", padx=(0, 16))
             self.name_label.configure(text="Notes, tonic first")
-            self.hint.configure(text="e.g.  D Eb F# G   or   A B-1 C D  (B-1 = B lowered by one koma)")
+            self.hint.configure(text="e.g.  D Eb F# G   ·   A B-1 C D  (B-1 = B lowered by one "
+                                     "koma)   ·   D Ed F G  (Ed = E half-flat)")
         else:
             self.notes.grid_remove()
             self.name.grid()
             self.tonic.grid()
             self.tonic_label.grid()
-            table = DROMOI if mode == "Dromos" else MAKAMS
+            table = {"Dromos": DROMOI, "Makam": MAKAMS, "Arabic": arabic.MAQAMAT}[mode]
             names = [item.name for item in table.values()]
             self.name.configure(values=names)
             if self.name.get() not in names:
                 self.name.set(names[0])
-            self.name_label.configure(text=mode)
-            self.hint.configure(
-                text="Tonic: D, A, F#, Eb …" if mode == "Dromos"
-                else "Tonic: D, A, F#, Eb … or with komas, e.g. B-1")
+            self.name_label.configure(text="Arabic maqam" if mode == "Arabic" else mode)
+            self.hint.configure(text={
+                "Dromos": "Tonic: D, A, F#, Eb …",
+                "Makam": "Tonic: D, A, F#, Eb … or with komas, e.g. B-1",
+                "Arabic": "Tonic: C, D, Bb … or with a quarter tone, e.g. Ed = E half-flat",
+            }[mode])
         self.run()
 
     # -- results ---------------------------------------------------------
@@ -355,6 +366,8 @@ class App(tk.Tk):
                 self._show_dromos(self.name.get(), tonic, a4)
             elif mode == "Makam":
                 self._show_makam(self.name.get(), tonic, a4)
+            elif mode == "Arabic":
+                self._show_arabic(self.name.get(), tonic, a4)
             else:
                 self._show_identify(self.notes.get().split())
         except (KeyError, ValueError) as exc:
@@ -387,6 +400,7 @@ class App(tk.Tk):
         parent = MAKAMS[dromos.makam].name if dromos.makam else None
         origin = f"From makam {parent}." if parent else "Greek-born, no makam parent."
         self._write(f"{dromos.description}  {origin}\n", "muted")
+        self._write(_equivalents_line("dromos", builder.find_dromos(name)[0]) + "\n", "equiv")
         self._song_panel("dromos", builder.find_dromos(name)[0])
 
         directions = ["asc", "desc"] if dromos.descending else ["asc"]
@@ -398,14 +412,24 @@ class App(tk.Tk):
                 makam_notes = sorted(
                     builder.build_makam(dromos.makam, tonic, direction, a4).notes,
                     key=lambda n: n.degree)
-                self._write(f"{label} on {tonic}, with makam {parent} beside it\n",
-                            "heading")
-                columns = [("Degree", 70, "center"), ("Note", 80, "center"),
-                           ("Greek", 90, "center"), ("Makam note", 110, "center"),
-                           ("Δ cents", 90, "center"), ("Hz", 90, "e")]
-                rows = [(n.degree, n.name, n.greek, m.name,
-                         f"{m.cents - n.cents:+.0f}", f"{n.frequency:.2f}")
-                        for n, m in zip(notes, makam_notes)]
+                arab = arabic.arabic_for("dromos", builder.find_dromos(name)[0])
+                arab_notes = sorted(arabic.build(arab.name, tonic, direction, a4),
+                                    key=lambda n: n.degree) if arab else []
+                beside = f"makam {parent}" + (f" and Arabic {arab.name}" if arab else "")
+                self._write(f"{label} on {tonic}, with {beside} beside it\n", "heading")
+                columns = [("Degree", 72, "center"), ("Note", 64, "center"),
+                           ("Greek", 76, "center"), ("Makam note", 108, "center"),
+                           ("Δ cents", 78, "center")]
+                if arab:
+                    columns += [("Arabic note", 108, "center"), ("Δ¢ Arabic", 90, "center")]
+                columns += [("Hz", 80, "e")]
+                rows = []
+                for i, (n, m) in enumerate(zip(notes, makam_notes)):
+                    row = [n.degree, n.name, n.greek, m.name, f"{m.cents - n.cents:+.0f}"]
+                    if arab:
+                        a = arab_notes[i]
+                        row += [a.name, f"{a.cents - n.cents:+.0f}"]
+                    rows.append(row + [f"{n.frequency:.2f}"])
             else:
                 self._write(f"{label} on {tonic}\n", "heading")
                 columns = [("Degree", 70, "center"), ("Note", 80, "center"),
@@ -443,6 +467,7 @@ class App(tk.Tk):
         self._write(f"Makam {makam.name}\n", "title")
         self._write(f"{makam.description}\nSeyir: {makam.seyir}  ·  güçlü (dominant): "
                     f"degree {makam.guclu + 1}\n", "muted")
+        self._write(_equivalents_line("makam", builder.find_makam(name)[0]) + "\n", "equiv")
         self._song_panel("makam", builder.find_makam(name)[0])
         for direction in ("asc", "desc"):
             notes = builder.build_makam(name, tonic, direction, a4).notes
@@ -686,6 +711,53 @@ class App(tk.Tk):
                 "Exported", f"Saved {len(data['songs'])} song suggestion(s) and "
                 f"{len(data['reports'])} report(s) to\n{path}", parent=self)
 
+    def _show_arabic(self, name: str, tonic: str | None, a4: float) -> None:
+        key, maqam = arabic.find_maqam(name)
+        tonic = tonic or maqam.tonic
+        self._write(f"Maqam {maqam.name}  ·  {maqam.arabic}\n", "title")
+        self._write(f"{maqam.description}\nGhammaz (dominant): degree "
+                    f"{maqam.ghammaz + 1}\n", "muted")
+        self._write(_equivalents_line("arabic", key) + "\n", "equiv")
+        self._song_panel("makam", maqam.makam)
+
+        directions = ["asc", "desc"] if maqam.descending else ["asc"]
+        for direction in directions:
+            notes = arabic.build(key, tonic, direction, a4)
+            label = "Ascending" if direction == "asc" else "Descending"
+            self._write(f"{label} on {notes[0 if direction == 'asc' else -1].name}\n",
+                        "heading")
+            columns = [("Degree", 70, "center"), ("Note", 80, "center"),
+                       ("Name", 110, "w"), ("Step", 120, "w"),
+                       ("Cents", 80, "center"), ("Hz", 90, "e")]
+            self._table(columns, [(n.degree, n.name, n.arabic_name, n.step,
+                                   f"{n.cents:.0f}", f"{n.frequency:.2f}") for n in notes])
+
+        turkish = MAKAMS[maqam.makam]
+        eq = arabic.equivalents("arabic", key)
+        dromoi = [DROMOI[k] for k in eq.dromoi]
+        others = f"makam {turkish.name}" + "".join(f" and dromos {d.name}" for d in dromoi)
+        self._write(f"Compared with {others} (cents above the tonic)\n", "heading")
+        ar = sorted(arabic.build(key, tonic), key=lambda n: n.degree)
+        mk = sorted(builder.build_makam(maqam.makam).notes,
+                    key=lambda n: n.degree)
+        columns = [("Degree", 72, "center"), ("Arabic", 80, "center"),
+                   (turkish.name, 100, "center"), ("Δ¢ Turkish", 96, "center")]
+        for d in dromoi:
+            columns += [(d.name, 90, "center"), (f"Δ¢ {d.name}", 96, "center")]
+        rows = []
+        for i, a in enumerate(ar):
+            row = [a.degree, f"{a.cents:.0f}", f"{mk[i].cents:.0f}",
+                   f"{mk[i].cents - a.cents:+.0f}"]
+            for d in dromoi:
+                fret = builder.dromos_positions(d)[i] * 100
+                row += [f"{fret:.0f}", f"{fret - a.cents:+.0f}"]
+            rows.append(row)
+        self._table(columns, rows)
+        self._write("Quarter-tone accidentals: E½♭ = E half-flat, F½♯ = F half-sharp "
+                    "(50¢). Arabic notation rounds to quarter tones; the real "
+                    "intonation of the half-flat notes varies by region, which is "
+                    "why the Turkish and Arabic values differ.\n", "small")
+
     def _show_identify(self, notes: list[str]) -> None:
         if not notes:
             self._write("Type the notes above, starting from the tonic.\n", "muted")
@@ -693,7 +765,8 @@ class App(tk.Tk):
         result = builder.identify(notes)
         self._write("  ".join(notes) + "\n", "title")
         self._write("Matching scales that start with these notes\n", "muted")
-        for label, key in (("Greek dromoi", "dromoi"), ("Turkish makams", "makams")):
+        for label, key in (("Greek dromoi", "dromoi"), ("Turkish makams", "makams"),
+                           ("Arabic maqamat", "arabic")):
             self._write(label + "\n", "heading")
             self._write(("  ·  ".join(result[key]) or "none") + "\n", "tip")
 

@@ -7,13 +7,33 @@ moves like the original makam.
 
 Given a name you get the notes; given the first notes you get the name.
 
-## Two tuning systems
+## Three tuning systems
 
-| | Makam (Ottoman/Turkish) | Dromos (Greek) |
+| | Makam (Ottoman/Turkish) | Maqam (Arabic) | Dromos (Greek) |
+|---|---|---|---|
+| Tuning | 53 komas per octave (Arel-Ezgi-Uzdilek theory), 1 koma ≈ 22.6¢ | 24 quarter tones per octave, 1 quarter tone = 50¢ | 12-tone equal temperament (bouzouki frets) |
+| Spelling | `B♭¹` = B lowered by 1 koma, `F♯⁴` = F raised by 4 komas | `E½♭` = E half-flat, `F½♯` = F half-sharp | `E♭`, `F♯` as usual |
+| Extras | perde names (Rast, Dügah, Segah…), AEU step names (K, B, S, M, T, A) | Arabic note names (Rast, Dukah, Sikah…) | Greek solfège (Ρε, Μι♭…) |
+
+Every page names the equivalent scale in the other two traditions, e.g.
+Greek **Ousak** = Turkish **Uşşak** = Arabic **Bayati**:
+
+| Greek dromos | Turkish makam | Arabic maqam |
 |---|---|---|
-| Tuning | 53 komas per octave (Arel-Ezgi-Uzdilek theory), 1 koma ≈ 22.6¢ | 12-tone equal temperament (bouzouki frets) |
-| Spelling | `B♭¹` = B lowered by 1 koma, `F♯⁴` = F raised by 4 komas | `E♭`, `F♯` as usual |
-| Extras | perde names (Rast, Dügah, Segah…), AEU step names (K, B, S, M, T, A) | Greek solfège (Ρε, Μι♭…) |
+| Matzore | Çargah | Ajam |
+| Minore | Nihavend | Nahawand |
+| Rast | Rast | Rast |
+| Ousak | Uşşak | Bayati |
+| — | Hüseyni | Husseini |
+| Kiourdi | Kürdi | Kurd |
+| Hitzaz | Hicaz | Hijaz |
+| Hitzazkiar | Hicazkâr | Hijaz Kar |
+| Sabah | Saba | Saba |
+| Houzam | Hüzzam | Huzam |
+| Segah | Segah | Sikah |
+| Karsigar | Karcığar | Bayati Shuri (Qarjighar) |
+| Neveser | Nev'eser | Nawa Athar |
+| Piraeus | — | — |
 
 ## Download and run (no Python needed)
 
@@ -66,6 +86,9 @@ python -m maqam_builder dromos ousak              # scale, makam comparison, tip
 python -m maqam_builder dromos hitzaz --tonic A
 python -m maqam_builder identify D Eb F# G        # -> Hitzaz, Hitzazkiar / Hicaz, Hicazkâr
 python -m maqam_builder identify A B-1 C D        # exact koma match against makams
+python -m maqam_builder arabic bayati             # Arabic maqam, equivalents, comparison
+python -m maqam_builder arabic huzam --tonic Ed   # Ed = E half-flat
+python -m maqam_builder identify D Ed F G         # quarter-tone match: Bayati, Husseini, ...
 python -m maqam_builder --a4 442 dromos sabah     # change the reference pitch
 ```
 

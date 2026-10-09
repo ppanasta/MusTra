@@ -144,7 +144,8 @@ def test_gui_builds_every_view(monkeypatch, tmp_path):
         pytest.skip("no display")
     try:
         app.show("main")
-        for mode, names in (("Dromos", DROMOI), ("Makam", MAKAMS)):
+        from maqam_builder.arabic import MAQAMAT
+        for mode, names in (("Dromos", DROMOI), ("Makam", MAKAMS), ("Arabic", MAQAMAT)):
             app.mode.set(mode)
             app._mode_changed()
             for item in names.values():
@@ -175,5 +176,6 @@ def test_gui_builds_every_view(monkeypatch, tmp_path):
         app.notes.insert(0, "D Eb F# G")
         app.run()
         assert "Hitzaz" in app.output.get("1.0", "end")
+        assert "Hijaz" in app.output.get("1.0", "end")
     finally:
         app.destroy()
