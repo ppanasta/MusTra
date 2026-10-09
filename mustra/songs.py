@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import shutil
 import sqlite3
 import sys
 from dataclasses import dataclass, field
@@ -100,17 +101,32 @@ def _check_scale(kind: str, scale: str) -> None:
         raise ValueError(f"Unknown {kind} {scale!r}.")
 
 
-def default_db_path() -> Path:
-    """Per-user data folder; MAQAM_BUILDER_DB overrides it."""
-    if os.environ.get("MAQAM_BUILDER_DB"):
-        return Path(os.environ["MAQAM_BUILDER_DB"])
+# Data folder of versions before the app was named MusTra (up to 1.1.0).
+LEGACY_DATA_FOLDER = "MaqamBuilder"
+
+
+def _data_base() -> Path:
     if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    return base / "MaqamBuilder" / "songs.sqlite3"
+        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+
+
+def default_db_path() -> Path:
+    """Per-user data folder; MUSTRA_DB overrides it.
+
+    On first use, a database from an older version (before the rename) is
+    copied over, so users keep their songs and reports.
+    """
+    if os.environ.get("MUSTRA_DB"):
+        return Path(os.environ["MUSTRA_DB"])
+    path = _data_base() / "MusTra" / "songs.sqlite3"
+    legacy = _data_base() / LEGACY_DATA_FOLDER / "songs.sqlite3"
+    if not path.exists() and legacy.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy, path)
+    return path
 
 
 def seed_key(kind: str, scale: str, title: str) -> str:
@@ -261,7 +277,7 @@ class SongStore:
             "SELECT s.title, s.kind AS listed_kind, s.scale AS listed_scale, "
             "r.kind AS reported_kind, r.scale AS reported_scale, r.comment, r.created_at "
             "FROM reports r JOIN songs s ON s.id = r.song_id ORDER BY r.id")]
-        data = {"format": "maqam_builder-contributions", "version": SCHEMA_VERSION,
+        data = {"format": "mustra-contributions", "version": SCHEMA_VERSION,
                 "songs": songs, "reports": reports}
         Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return data

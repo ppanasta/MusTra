@@ -1,4 +1,4 @@
-"""Command-line interface: ``python -m maqam_builder --help``."""
+"""Command-line interface: ``python -m mustra --help``."""
 
 from __future__ import annotations
 
@@ -241,7 +241,7 @@ def cmd_export(args) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="maqam_builder",
+        prog="mustra",
         description="Notes of Turkish makams (53-koma) and Greek dromoi "
                     "(12-TET), with tips for bending the dromos toward the makam.")
     parser.add_argument("--a4", type=float, default=440.0, help="reference pitch (Hz)")

@@ -1,4 +1,8 @@
-# maqam_builder
+# MusTra
+
+*Music & Translations*: one program that translates between three
+traditions of modal music: Greek rebetiko dromoi, Turkish makams and Arabic
+maqamat.
 
 Calculate the notes of **Turkish (Anatolian) makams** and of the Greek
 rebetiko **dromoi** (δρόμοι) derived from them, and get **intonation tips**
@@ -42,9 +46,9 @@ Ready-made programs are built automatically by GitHub Actions
 
 | System | File | How to open |
 |---|---|---|
-| Windows | `MaqamBuilder-windows.exe` | double-click (if SmartScreen warns: *More info → Run anyway*) |
-| macOS | `MaqamBuilder-macos.zip` | unzip, then right-click `MaqamBuilder.app` → *Open* the first time |
-| Linux | `MaqamBuilder-linux` | `chmod +x MaqamBuilder-linux && ./MaqamBuilder-linux` |
+| Windows | `MusTra-windows.exe` | double-click (if SmartScreen warns: *More info → Run anyway*) |
+| macOS | `MusTra-macos.zip` | unzip, then right-click `MusTra.app` → *Open* the first time |
+| Linux | `MusTra-linux` | `chmod +x MusTra-linux && ./MusTra-linux` |
 
 Get them from the repository's **Actions** tab (open the latest *Build
 executables* run → *Artifacts*), or from **Releases** once a version tag
@@ -56,7 +60,7 @@ choose **Dromos**, **Makam** or **Identify**, pick a name, optionally a
 tonic, and the notes, makam comparison and playing tips appear.
 
 The same file also works as a command-line tool when given arguments, e.g.
-`MaqamBuilder-windows.exe dromos ousak`.
+`MusTra-windows.exe dromos ousak`.
 
 To write the text of a release, add `release-notes/<tag>.md` (e.g.
 `release-notes/v1.1.0.md`) and push: the *Release notes* workflow copies it
@@ -66,7 +70,7 @@ into the GitHub Release with that tag.
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name MaqamBuilder run_gui.py   # -> dist/
+pyinstaller --onefile --windowed --name MusTra run_gui.py   # -> dist/
 ```
 
 PyInstaller builds for the system it runs on, so build the Windows `.exe` on
@@ -74,22 +78,22 @@ Windows (or let the workflow do it).
 
 ## Command line (from source)
 
-Python 3.10+, no dependencies. `python -m maqam_builder` with no arguments
+Python 3.10+, no dependencies. `python -m mustra` with no arguments
 opens the window.
 
 ```bash
-python -m maqam_builder list                      # all dromoi and makams
-python -m maqam_builder makam hicaz               # Hicaz on dügah (A), Turkish notation
-python -m maqam_builder makam rast --tonic D      # transpose
-python -m maqam_builder makam huzzam --tonic B-1  # koma offsets allowed for makams
-python -m maqam_builder dromos ousak              # scale, makam comparison, tips
-python -m maqam_builder dromos hitzaz --tonic A
-python -m maqam_builder identify D Eb F# G        # -> Hitzaz, Hitzazkiar / Hicaz, Hicazkâr
-python -m maqam_builder identify A B-1 C D        # exact koma match against makams
-python -m maqam_builder arabic bayati             # Arabic maqam, equivalents, comparison
-python -m maqam_builder arabic huzam --tonic Ed   # Ed = E half-flat
-python -m maqam_builder identify D Ed F G         # quarter-tone match: Bayati, Husseini, ...
-python -m maqam_builder --a4 442 dromos sabah     # change the reference pitch
+python -m mustra list                      # all dromoi and makams
+python -m mustra makam hicaz               # Hicaz on dügah (A), Turkish notation
+python -m mustra makam rast --tonic D      # transpose
+python -m mustra makam huzzam --tonic B-1  # koma offsets allowed for makams
+python -m mustra dromos ousak              # scale, makam comparison, tips
+python -m mustra dromos hitzaz --tonic A
+python -m mustra identify D Eb F# G        # -> Hitzaz, Hitzazkiar / Hicaz, Hicazkâr
+python -m mustra identify A B-1 C D        # exact koma match against makams
+python -m mustra arabic bayati             # Arabic maqam, equivalents, comparison
+python -m mustra arabic huzam --tonic Ed   # Ed = E half-flat
+python -m mustra identify D Ed F G         # quarter-tone match: Bayati, Husseini, ...
+python -m mustra --a4 442 dromos sabah     # change the reference pitch
 ```
 
 Names are forgiving: `uşşak`, `ussak`, `Ουσάκ`, `saba`/`sabah` all work.
@@ -116,7 +120,7 @@ Greek rebetiko repertoire lists that give each song's dromos and key
 ([kithara.gr](https://forum.kithara.gr/index.php?topic=84181.0),
 [rembetiko.gr](https://rembetiko.gr/)), and Turkish works-by-makam
 collections and references (SalihBora.com, TDV İslâm Ansiklopedisi, …).
-The seed list is in `maqam_builder/songs_seed.py`.
+The seed list is in `mustra/songs_seed.py`.
 
 Users can correct it:
 
@@ -131,11 +135,11 @@ Users can correct it:
 From the command line:
 
 ```bash
-python -m maqam_builder songs hitzaz              # suggestion + all songs (ids in [brackets])
-python -m maqam_builder songs hicaz --makam
-python -m maqam_builder report 17 --dromos houzam --comment "heard it on the record"
-python -m maqam_builder add-song "Title" --dromos ousak --artist "Composer" --year 1936
-python -m maqam_builder export my_contributions.json
+python -m mustra songs hitzaz              # suggestion + all songs (ids in [brackets])
+python -m mustra songs hicaz --makam
+python -m mustra report 17 --dromos houzam --comment "heard it on the record"
+python -m mustra add-song "Title" --dromos ousak --artist "Composer" --year 1936
+python -m mustra export my_contributions.json
 ```
 
 ### Where the data lives
@@ -146,11 +150,13 @@ with real queries. It is created on first use in the user's data folder:
 
 | System | Location |
 |---|---|
-| Windows | `%APPDATA%\MaqamBuilder\songs.sqlite3` |
-| macOS | `~/Library/Application Support/MaqamBuilder/songs.sqlite3` |
-| Linux | `~/.local/share/MaqamBuilder/songs.sqlite3` |
+| Windows | `%APPDATA%\MusTra\songs.sqlite3` |
+| macOS | `~/Library/Application Support/MusTra/songs.sqlite3` |
+| Linux | `~/.local/share/MusTra/songs.sqlite3` |
 
-Set `MAQAM_BUILDER_DB` (or `--db` on the command line) to use another file.
+Set `MUSTRA_DB` (or `--db` on the command line) to use another file.
+Data from versions before the app was renamed (up to 1.1.0) is copied over
+automatically on first start.
 New literature songs from an updated version are added on start without
 touching the user's own data.
 
@@ -195,7 +201,7 @@ Segah, Karcığar, Nev'eser, Çargah, Nihavend.
   some notes lower than the theory, for example Uşşak's segah, which is often
   played around +50–65¢ above the E♭ rather than +81¢. Use your ears.
 * Dromos charts differ between teachers and regions. Everything is in
-  `maqam_builder/data.py`; add or adjust makams and dromoi there.
+  `mustra/data.py`; add or adjust makams and dromoi there.
 
 ## Tests
 

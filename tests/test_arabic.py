@@ -1,8 +1,8 @@
 import pytest
 
-from maqam_builder import arabic, builder
-from maqam_builder.cli import main
-from maqam_builder.data import DROMOI, MAKAMS
+from mustra import arabic, builder
+from mustra.cli import main
+from mustra.data import DROMOI, MAKAMS
 
 
 @pytest.mark.parametrize("key", arabic.MAQAMAT)

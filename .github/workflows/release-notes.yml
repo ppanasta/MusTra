@@ -1,6 +1,7 @@
 name: Release notes
 
-# Copies release-notes/<tag>.md into the text of the GitHub Release <tag>.
+# Copies release-notes/<tag>.md into the text of the GitHub Release <tag>,
+# and titles the release "MusTra <tag>".
 # Edit or add a file in release-notes/ and push; releases that do not exist
 # yet are skipped (the notes are applied on the next push after they exist).
 on:
@@ -25,7 +26,7 @@ jobs:
           for file in release-notes/v*.md; do
             tag=$(basename "$file" .md)
             if gh release view "$tag" > /dev/null 2>&1; then
-              gh release edit "$tag" --notes-file "$file"
+              gh release edit "$tag" --title "MusTra $tag" --notes-file "$file"
               echo "Updated $tag"
             else
               echo "No release $tag yet, skipping"

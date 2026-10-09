@@ -1,4 +1,4 @@
-"""Desktop window for Maqam Builder (Tkinter, no extra dependencies)."""
+"""Desktop window for MusTra (Tkinter, no extra dependencies)."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def _pick_font(preferred, fallback: str) -> str:
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Maqam Builder")
+        self.title("MusTra")
         self.geometry("960x720")
         self.minsize(760, 560)
         self.configure(bg=BG)
@@ -211,9 +211,10 @@ class App(tk.Tk):
         canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
 
-        self._label(page, "Maqam Builder", "title", PRIMARY_DARK).pack(anchor="w")
-        self._label(page, "Turkish makams  ·  Greek rebetiko dromoi  ·  "
-                          "microtonal playing tips", "subtitle", MUTED).pack(anchor="w")
+        self._label(page, "MusTra", "title", PRIMARY_DARK).pack(anchor="w")
+        self._label(page, "Music & Translations  —  Greek dromoi  ·  Turkish makams  ·  "
+                          "Arabic maqamat  ·  microtonal playing tips", "subtitle",
+                    MUTED).pack(anchor="w")
         tk.Frame(page, bg=PRIMARY, height=3, width=80).pack(anchor="w", pady=(14, 22))
 
         card = tk.Frame(page, bg=CARD, padx=28, pady=22,
@@ -255,7 +256,7 @@ class App(tk.Tk):
 
         top = tk.Frame(page, bg=BG)
         top.pack(fill="x")
-        self._label(top, "Maqam Builder", "heading", PRIMARY_DARK).pack(side="left")
+        self._label(top, "MusTra", "heading", PRIMARY_DARK).pack(side="left")
         ttk.Button(top, text="End", style="Ghost.TButton",
                    command=self.destroy).pack(side="right")
         ttk.Button(top, text="Back", style="Ghost.TButton",
@@ -703,7 +704,7 @@ class App(tk.Tk):
     def _export(self) -> None:
         path = filedialog.asksaveasfilename(
             parent=self, title="Export my contributions", defaultextension=".json",
-            initialfile="maqam_builder_contributions.json",
+            initialfile="mustra_contributions.json",
             filetypes=[("JSON", "*.json")])
         if path:
             data = self.store.export_json(path)

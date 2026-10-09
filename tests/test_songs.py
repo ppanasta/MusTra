@@ -3,10 +3,10 @@ import random
 
 import pytest
 
-from maqam_builder.cli import main
-from maqam_builder.data import DROMOI, MAKAMS
-from maqam_builder.songs import SongStore, default_db_path
-from maqam_builder.songs_seed import SEED_SONGS
+from mustra.cli import main
+from mustra.data import DROMOI, MAKAMS
+from mustra.songs import SongStore, default_db_path
+from mustra.songs_seed import SEED_SONGS
 
 
 @pytest.fixture
@@ -109,7 +109,7 @@ def test_export_json(store, tmp_path):
 
 
 def test_default_db_path_env_override(monkeypatch, tmp_path):
-    monkeypatch.setenv("MAQAM_BUILDER_DB", str(tmp_path / "x.db"))
+    monkeypatch.setenv("MUSTRA_DB", str(tmp_path / "x.db"))
     assert default_db_path() == tmp_path / "x.db"
 
 
@@ -125,3 +125,18 @@ def test_cli_song_commands(tmp_path, capsys):
     assert main(["--db", db, "report", "1", "--dromos", "ousak", "--comment", "hm"]) == 0
     assert main(["--db", db, "export", str(tmp_path / "e.json")]) == 0
     assert "1 suggestion(s) and 1 report(s)" in capsys.readouterr().out
+
+
+def test_data_from_before_the_rename_is_migrated(monkeypatch, tmp_path):
+    from mustra import songs
+    monkeypatch.delenv("MUSTRA_DB", raising=False)
+    monkeypatch.setattr(songs, "_data_base", lambda: tmp_path)
+    legacy = tmp_path / songs.LEGACY_DATA_FOLDER / "songs.sqlite3"
+    legacy.parent.mkdir()
+    with SongStore(legacy) as old:
+        old.add_song("Kept across the rename", "dromos", "rast")
+    path = default_db_path()
+    assert path == tmp_path / "MusTra" / "songs.sqlite3"
+    with SongStore(path) as new:
+        assert any(s.title == "Kept across the rename"
+                   for s in new.songs_for("dromos", "rast"))
