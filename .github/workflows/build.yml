@@ -26,11 +26,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            asset: MaqamBuilder-windows.exe
+            asset: MusTra-windows.exe
           - os: macos-latest
-            asset: MaqamBuilder-macos.zip
+            asset: MusTra-macos.zip
           - os: ubuntu-latest
-            asset: MaqamBuilder-linux
+            asset: MusTra-linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -51,19 +51,19 @@ jobs:
         run: python -m pytest -q
 
       - name: Build
-        run: pyinstaller --onefile --windowed --name MaqamBuilder run_gui.py
+        run: pyinstaller --onefile --windowed --name MusTra run_gui.py
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: Move-Item dist/MaqamBuilder.exe ${{ matrix.asset }}
+        run: Move-Item dist/MusTra.exe ${{ matrix.asset }}
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent dist/MaqamBuilder.app ${{ matrix.asset }}
+        run: ditto -c -k --keepParent dist/MusTra.app ${{ matrix.asset }}
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
-        run: mv dist/MaqamBuilder ${{ matrix.asset }}
+        run: mv dist/MusTra ${{ matrix.asset }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -82,5 +82,5 @@ jobs:
         with:
           tag_name: ${{ inputs.version }}
           target_commitish: ${{ github.sha }}
-          name: Maqam Builder ${{ inputs.version }}
+          name: MusTra ${{ inputs.version }}
           files: ${{ matrix.asset }}

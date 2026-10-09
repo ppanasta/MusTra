@@ -1,8 +1,8 @@
 import pytest
 
-from maqam_builder import builder, pitch
-from maqam_builder.cli import main
-from maqam_builder.data import DROMOI, MAKAMS
+from mustra import builder, pitch
+from mustra.cli import main
+from mustra.data import DROMOI, MAKAMS
 
 
 @pytest.mark.parametrize("key", MAKAMS)
@@ -136,15 +136,16 @@ def test_cli_reports_errors(capsys):
 
 def test_gui_builds_every_view(monkeypatch, tmp_path):
     tk = pytest.importorskip("tkinter")
-    monkeypatch.setenv("MAQAM_BUILDER_DB", str(tmp_path / "gui.sqlite3"))
+    monkeypatch.setenv("MUSTRA_DB", str(tmp_path / "gui.sqlite3"))
     try:
-        from maqam_builder.gui import App
+        from mustra.gui import App
         app = App()
     except tk.TclError:
         pytest.skip("no display")
     try:
         app.show("main")
-        for mode, names in (("Dromos", DROMOI), ("Makam", MAKAMS)):
+        from mustra.arabic import MAQAMAT
+        for mode, names in (("Dromos", DROMOI), ("Makam", MAKAMS), ("Arabic", MAQAMAT)):
             app.mode.set(mode)
             app._mode_changed()
             for item in names.values():
@@ -175,5 +176,6 @@ def test_gui_builds_every_view(monkeypatch, tmp_path):
         app.notes.insert(0, "D Eb F# G")
         app.run()
         assert "Hitzaz" in app.output.get("1.0", "end")
+        assert "Hijaz" in app.output.get("1.0", "end")
     finally:
         app.destroy()

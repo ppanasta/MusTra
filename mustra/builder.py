@@ -201,6 +201,10 @@ def dromos_tips(name: str, tonic: str | None = None, direction: str = "asc") -> 
         for d in (direction, other)
     }
     stable = {0, makam.guclu, 7}
+    from . import arabic
+    arab = arabic.arabic_for("dromos", find_dromos(name)[0])
+    arab_cents = ({d: arabic.degree_cents(arab, d) for d in (direction, other)}
+                  if arab else {})
     tips = []
     for i, note in enumerate(notes[:-1]):
         if i == 0:
@@ -231,6 +235,12 @@ def dromos_tips(name: str, tonic: str | None = None, direction: str = "asc") -> 
         pull = _attraction_text(positions, stable, i)
         if pull:
             parts.append(f"In the makam this note {pull}.")
+        if arab is not None:
+            arab_dev = arab_cents[best][i] - note.cents
+            if abs(arab_dev) >= 25:
+                parts.append(f"Arabic {arab.name} writes it {abs(arab_dev):.0f}¢ "
+                             f"{'higher' if arab_dev > 0 else 'lower'} (quarter-tone "
+                             "notation), a common practical value.")
         if parts:
             tips.append(Tip(i + 1, note.name, makam_notes[i].name, dev, " ".join(parts)))
 
@@ -252,19 +262,20 @@ def dromos_tips(name: str, tonic: str | None = None, direction: str = "asc") -> 
 # --------------------------------------------------------------------------
 
 def identify(notes: list[str]) -> dict[str, list[str]]:
-    """Find dromoi and makams whose scale starts with ``notes``.
+    """Find dromoi, makams and Arabic maqamat whose scale starts with ``notes``.
 
     The first note is taken as the tonic and the rest as the following
     consecutive degrees (ascending or descending forms).  Notes with a koma
-    offset (e.g. ``B-1``) are matched exactly against makams; plain notes
-    are matched against the nearest semitone of each makam degree.
+    offset (e.g. ``B-1``) are matched exactly against makams; notes with a
+    quarter tone (e.g. ``Ed``, E half-flat) exactly against Arabic maqamat;
+    plain notes against the nearest semitone of every scale.
     """
+    from . import arabic
+
     if len(notes) < 2:
         raise ValueError("Give at least two notes, starting from the tonic.")
-    parsed = [pitch.parse_note(n) for n in notes]
-    if len(parsed) > 8:
+    if len(notes) > 8:
         raise ValueError("Give at most eight notes (tonic to octave).")
-    exact = any(k for _, _, k in parsed)
 
     def rising(values: list[int], modulus: int) -> list[int]:
         out = [0]
@@ -272,10 +283,20 @@ def identify(notes: list[str]) -> dict[str, list[str]]:
             out.append(out[-1] + (cur - prev) % modulus)
         return out
 
+    n = len(notes)
+    if any(arabic.has_quarter_tone(x) for x in notes):
+        parsed_q = [arabic.parse_note(x) for x in notes]
+        quarters = rising([arabic.NATURAL_QUARTERS[l] + q for l, q in parsed_q],
+                          arabic.QUARTERS_PER_OCTAVE)
+        hits = [m.name for m in arabic.MAQAMAT.values()
+                if any(arabic.positions(m, d)[:n] == quarters for d in ("asc", "desc"))]
+        return {"dromoi": [], "makams": [], "arabic": hits}
+
+    parsed = [pitch.parse_note(x) for x in notes]
+    exact = any(k for _, _, k in parsed)
     semis = rising([pitch.NATURAL_SEMITONES[l] + s for l, s, _ in parsed], 12)
     komas = rising([pitch.NATURAL_KOMAS[l] + s * pitch.SHARP_KOMAS + k
                     for l, s, k in parsed], pitch.KOMAS_PER_OCTAVE)
-    n = len(parsed)
 
     dromoi = []
     if not exact:
@@ -295,4 +316,16 @@ def identify(notes: list[str]) -> dict[str, list[str]]:
             if hit:
                 makams.append(m.name)
                 break
-    return {"dromoi": dromoi, "makams": makams}
+
+    # Plain notes cannot show a quarter tone, so an Arabic maqam matches when
+    # its Turkish/Greek counterpart matched, or its notes match exactly.
+    matched_makams = {k for k, m in MAKAMS.items() if m.name in makams}
+    matched_makams |= {d.makam for d in DROMOI.values() if d.name in dromoi}
+    maqamat = []
+    if not exact:
+        for m in arabic.MAQAMAT.values():
+            exact_hit = any(arabic.positions(m, d)[:n] == [2 * x for x in semis]
+                            for d in ("asc", "desc"))
+            if m.makam in matched_makams or exact_hit:
+                maqamat.append(m.name)
+    return {"dromoi": dromoi, "makams": makams, "arabic": maqamat}
