@@ -4,7 +4,7 @@ MusTra now runs on iPhone and iPad as a web app you add to your home screen. It'
 
 ### Install
 
-1. Open **https://ppanasta.github.io/maqam_builder/** in **Safari**.
+1. Open **https://ppanasta.github.io/MusTra/** in **Safari**.
 2. Tap **Share** (the square with the arrow) → **Add to Home Screen** → **Add**.
 3. Open MusTra from the home screen. The first start downloads about 15 MB, the Python engine that does the calculations. After that it works offline.
 

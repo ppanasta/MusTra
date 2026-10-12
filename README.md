@@ -85,7 +85,7 @@ identical to the desktop program, and both work offline.
 
 | Phone | How to get it |
 |---|---|
-| iPhone / iPad | Open the web app in **Safari**: <https://ppanasta.github.io/maqam_builder/> (the address follows the repository name), tap **Share → Add to Home Screen**. The first start downloads about 15 MB; after that it works offline. |
+| iPhone / iPad | Open the web app in **Safari**: <https://ppanasta.github.io/MusTra/>, tap **Share → Add to Home Screen**. The first start downloads about 15 MB; after that it works offline. |
 | Android | Download `MusTra-android.apk` from the *MusTra for Android* release, open it, and allow "install unknown apps" for your browser or file manager when asked. |
 
 Songs you suggest and corrections you make are stored on the phone (in the
