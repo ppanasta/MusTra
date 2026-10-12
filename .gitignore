@@ -4,3 +4,10 @@ __pycache__/
 build/
 dist/
 *.spec
+mobile/dist/
+mobile/.cache/
+mobile/android/app/src/main/assets/www/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/local.properties

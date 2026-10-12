@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MusTra</title>
+  <meta name="description" content="MusTra — Music & Translations: Greek dromoi, Turkish makams and Arabic maqamat with microtonal playing tips.">
+  <meta name="theme-color" content="#6A3FA0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="MusTra">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- Welcome ------------------------------------------------------------ -->
+  <main id="welcome" class="page">
+    <header class="hero">
+      <h1>MusTra</h1>
+      <p class="tagline">Music &amp; Translations</p>
+      <p class="muted">Greek dromoi · Turkish makams · Arabic maqamat · microtonal playing tips</p>
+      <div class="rule"></div>
+    </header>
+
+    <section class="card">
+      <h2>How to use</h2>
+      <ol class="steps">
+        <li>Press <b>Start</b>.</li>
+        <li>Choose <b>Dromos</b> (Greek), <b>Makam</b> (Turkish), <b>Arabic</b> (maqam, in quarter tones) or <b>Identify</b> (type notes, get the name).</li>
+        <li>Pick a name. Optionally type a tonic: D, A, F#, Eb… For makams also B-1 (B lowered by one koma); for Arabic Ed (E half-flat).</li>
+        <li>You get the notes, the original makam and Arabic maqam beside each dromos, and the playing tips: <b>↑</b> bend the note up, <b>↓</b> hold it low.</li>
+        <li>Each page suggests a song from the literature. <b>Another</b> shows a new one; <b>Wrong?</b> lets you give the right dromos/makam and suggest a better song. Your corrections stay on this device.</li>
+        <li>Tap an equivalent (e.g. <i>Arabic Bayati</i>) to jump to it. <b>Back</b> returns here; <b>End</b> closes MusTra.</li>
+      </ol>
+    </section>
+
+    <div class="actions">
+      <button id="start" class="primary" disabled>Start</button>
+      <button id="end" class="ghost">End</button>
+    </div>
+    <p id="loading" class="muted small" role="status">Preparing MusTra…</p>
+
+    <section>
+      <h2>References</h2>
+      <ul class="refs">
+        <li><a href="https://www.carmelosiciliano.com/books/the-theory-of-rebetiko/" target="_blank" rel="noopener">Carmelo Siciliano — The Theory of Rebetiko</a></li>
+        <li><a href="https://www.carmelosiciliano.com/ousak-mode-dromos" target="_blank" rel="noopener">Siciliano — Ousak mode and dromos</a></li>
+        <li><a href="https://www.carmelosiciliano.com/kiourdi-mode-and-dromos/" target="_blank" rel="noopener">Siciliano — Kiourdi mode and dromos</a></li>
+        <li><a href="https://www.carmelosiciliano.com/pireotikos/" target="_blank" rel="noopener">Siciliano — Pireotiko(s)</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Rebetiko" target="_blank" rel="noopener">Wikipedia — Rebetiko</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Turkish_makam" target="_blank" rel="noopener">Wikipedia — Turkish makam</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Arabic_maqam" target="_blank" rel="noopener">Wikipedia — Arabic maqam</a></li>
+        <li><a href="https://www.maqamworld.com/" target="_blank" rel="noopener">Maqam World</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Holdrian_comma" target="_blank" rel="noopener">Wikipedia — Holdrian comma</a></li>
+        <li><a href="https://forum.kithara.gr/index.php?topic=84181.0" target="_blank" rel="noopener">Song lists — Λαϊκοί Δρόμοι (kithara.gr)</a></li>
+        <li><a href="https://www.salihbora.com/makam/hicaz/" target="_blank" rel="noopener">Song lists — SalihBora.com</a></li>
+      </ul>
+      <p class="muted small">Makam pitches follow Arel-Ezgi-Uzdilek theory (53 komas per octave); Arabic maqamat use 24 quarter tones; dromos charts follow common rebetiko practice. Use your ears.</p>
+    </section>
+  </main>
+
+  <!-- Lookup ------------------------------------------------------------- -->
+  <main id="lookup" class="page" hidden>
+    <header class="topbar">
+      <button id="back" class="icon" aria-label="Back to the welcome page">‹ Back</button>
+      <span class="brand">MusTra</span>
+      <button id="end2" class="icon">End</button>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-mode="dromos" aria-selected="true">Dromos</button>
+      <button role="tab" data-mode="makam">Makam</button>
+      <button role="tab" data-mode="arabic">Arabic</button>
+      <button role="tab" data-mode="identify">Identify</button>
+    </nav>
+
+    <form id="controls" class="controls" autocomplete="off">
+      <label id="name-wrap">
+        <span id="name-label">Dromos</span>
+        <select id="name"></select>
+      </label>
+      <label id="notes-wrap" hidden>
+        <span>Notes, tonic first</span>
+        <input id="notes" placeholder="D Eb F# G" autocapitalize="characters" spellcheck="false">
+      </label>
+      <div class="row">
+        <label id="tonic-wrap"><span>Tonic</span><input id="tonic" placeholder="auto" spellcheck="false"></label>
+        <label><span>A4 Hz</span><input id="a4" inputmode="decimal" value="440"></label>
+        <button class="primary" type="submit">Show</button>
+      </div>
+      <p id="hint" class="muted small"></p>
+    </form>
+
+    <article id="result" aria-live="polite"></article>
+  </main>
+
+  <!-- Dialogs -------------------------------------------------------------- -->
+  <dialog id="report-dialog">
+    <form method="dialog" id="report-form">
+      <h2>Wrong dromos / makam?</h2>
+      <p id="report-song"></p>
+      <label><span>It actually is</span>
+        <select id="report-kind"><option value="dromos">Greek dromos</option><option value="makam">Turkish makam</option></select>
+      </label>
+      <label><span>Which one</span><select id="report-scale"></select></label>
+      <label><span>Why? (optional)</span><input id="report-comment"></label>
+      <p class="muted small" id="report-better-label">Suggest a more suitable song (optional)</p>
+      <label><span>Song title</span><input id="report-title"></label>
+      <label><span>Composer / performer</span><input id="report-artist"></label>
+      <p class="error small" id="report-error"></p>
+      <div class="actions end">
+        <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+        <button id="report-save" class="primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="suggest-dialog">
+    <form method="dialog" id="suggest-form">
+      <h2>Suggest a song</h2>
+      <label><span>Song title</span><input id="suggest-title" required></label>
+      <label><span>Composer / performer</span><input id="suggest-artist"></label>
+      <label><span>Year (optional)</span><input id="suggest-year" inputmode="numeric"></label>
+      <label><span>It is in</span>
+        <select id="suggest-kind"><option value="dromos">Greek dromos</option><option value="makam">Turkish makam</option></select>
+      </label>
+      <label><span>Which one</span><select id="suggest-scale"></select></label>
+      <label><span>Source (optional)</span><input id="suggest-source"></label>
+      <p class="error small" id="suggest-error"></p>
+      <div class="actions end">
+        <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+        <button id="suggest-save" class="primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="pyodide/pyodide.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
