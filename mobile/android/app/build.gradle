@@ -1,0 +1,54 @@
+plugins {
+    id "com.android.application"
+}
+
+// Release signing: set MUSTRA_KEYSTORE (path), MUSTRA_KEYSTORE_PASSWORD,
+// MUSTRA_KEY_ALIAS and MUSTRA_KEY_PASSWORD. Without them the release APK is
+// signed with the build machine's debug key (installable, but each build
+// machine has its own key, so updates need an uninstall first).
+def keystorePath = System.getenv("MUSTRA_KEYSTORE")
+
+android {
+    namespace "org.mustra.app"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "org.mustra.app"
+        minSdk 24
+        targetSdk 34
+        versionCode Integer.parseInt(project.findProperty("versionCode") ?: "1")
+        versionName project.findProperty("versionName") ?: "dev"
+    }
+
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("MUSTRA_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("MUSTRA_KEY_ALIAS")
+                keyPassword System.getenv("MUSTRA_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        // The Python runtime is already compressed; keep it fast to read.
+        noCompress += ["wasm", "zip"]
+    }
+}
+
+dependencies {
+    implementation "androidx.webkit:webkit:1.11.0"
+}

@@ -1,0 +1,172 @@
+name: Mobile apps
+
+# Builds MusTra for phones:
+# - the web app (iPhone: Safari → Add to Home Screen), tested in a real
+#   browser and deployed to GitHub Pages from main;
+# - the Android app (APK), which bundles the same web app.
+# Run it by hand with a version (Actions → Mobile apps → Run workflow) to
+# create the two releases: ios-v<version> and android-v<version>.
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.2.0 (leave empty for a test build)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  VERSION: ${{ inputs.version || format('0.0.{0}', github.run_number) }}
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache the Pyodide release
+        uses: actions/cache@v4
+        with:
+          path: mobile/.cache
+          key: pyodide-0.26.4
+
+      - name: Install tools
+        run: |
+          python -m pip install pytest playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Build the web app
+        run: python mobile/build_web.py --out mobile/dist --version "$VERSION"
+
+      - name: Test it in a browser
+        run: |
+          (cd mobile/dist && python -m http.server 8765 &)
+          sleep 2
+          python mobile/tests/smoke.py http://127.0.0.1:8765/
+
+      - name: Zip for the release
+        run: cd mobile/dist && zip -qr ../MusTra-web.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: mobile/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusTra-web.zip
+          path: mobile/MusTra-web.zip
+
+  android:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: mobile/android/app/src/main/assets/www
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Signing key (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MUSTRA_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/mustra.jks"
+            echo "MUSTRA_KEYSTORE=$RUNNER_TEMP/mustra.jks" >> "$GITHUB_ENV"
+          else
+            echo "::notice::No MUSTRA_KEYSTORE_BASE64 secret: the APK is signed with a temporary key."
+          fi
+
+      - name: Build the APK
+        env:
+          MUSTRA_KEYSTORE_PASSWORD: ${{ secrets.MUSTRA_KEYSTORE_PASSWORD }}
+          MUSTRA_KEY_ALIAS: ${{ secrets.MUSTRA_KEY_ALIAS }}
+          MUSTRA_KEY_PASSWORD: ${{ secrets.MUSTRA_KEY_PASSWORD }}
+        run: |
+          gradle -p mobile/android assembleRelease \
+            -PversionName="$VERSION" -PversionCode="${{ github.run_number }}"
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk MusTra-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusTra-android.apk
+          path: MusTra-android.apk
+
+  pages:
+    # Needs: the repository public (or a paid plan) and Settings → Pages →
+    # Source: GitHub Actions. Until then this job fails without blocking the rest.
+    needs: web
+    if: github.ref == 'refs/heads/main'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  release:
+    needs: [web, android]
+    if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: iPhone release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: MusTra for iPhone ${{ inputs.version }}
+          body_path: release-notes/ios-v${{ inputs.version }}.md
+          make_latest: false
+          files: out/MusTra-web.zip
+
+      - name: Android release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: MusTra for Android ${{ inputs.version }}
+          body_path: release-notes/android-v${{ inputs.version }}.md
+          make_latest: false
+          files: out/MusTra-android.apk

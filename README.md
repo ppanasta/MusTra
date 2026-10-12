@@ -76,6 +76,50 @@ pyinstaller --onefile --windowed --name MusTra run_gui.py   # -> dist/
 PyInstaller builds for the system it runs on, so build the Windows `.exe` on
 Windows (or let the workflow do it).
 
+## Phones: iPhone and Android
+
+Both phone versions show the same touch-friendly app (`mobile/web/`), which
+runs this Python package inside the browser with
+[Pyodide](https://pyodide.org) (Python compiled to WebAssembly). Results are
+identical to the desktop program, and both work offline.
+
+| Phone | How to get it |
+|---|---|
+| iPhone / iPad | Open the web app in **Safari**: <https://ppanasta.github.io/MusTra/>, tap **Share → Add to Home Screen**. The first start downloads about 15 MB; after that it works offline. |
+| Android | Download `MusTra-android.apk` from the *MusTra for Android* release, open it, and allow "install unknown apps" for your browser or file manager when asked. |
+
+Songs you suggest and corrections you make are stored on the phone (in the
+web app's storage on iPhone, in the app on Android) and can be exported with
+**Export**.
+
+Built by `.github/workflows/mobile.yml`:
+
+* **web**: unit tests, `python mobile/build_web.py` (front end + this package
+  + the Pyodide runtime with sqlite3), then a real-browser test
+  (`mobile/tests/smoke.py`, Playwright).
+* **android**: wraps the web app in a WebView app (`mobile/android/`) and
+  builds the APK with Gradle.
+* **pages**: deploys the web app to GitHub Pages from `main`. Needs the
+  repository to be public (or a paid plan) and **Settings → Pages → Source:
+  GitHub Actions**.
+* **release**: run the workflow by hand with a version to create the
+  releases `ios-v<version>` and `android-v<version>`. They are not marked
+  "latest", so the desktop download links keep pointing at the desktop
+  release.
+
+Android signing: without secrets, each build is signed with a temporary key,
+so installing a newer APK over an older one needs an uninstall first (which
+also clears the phone's songs; export them first). For seamless updates, add
+the repository secrets `MUSTRA_KEYSTORE_BASE64` (a base64-encoded keystore),
+`MUSTRA_KEYSTORE_PASSWORD`, `MUSTRA_KEY_ALIAS` and `MUSTRA_KEY_PASSWORD`.
+
+To try the web app locally:
+
+```bash
+python mobile/build_web.py --out mobile/dist     # downloads Pyodide once into mobile/.cache
+cd mobile/dist && python -m http.server 8000     # then open http://localhost:8000
+```
+
 ## Command line (from source)
 
 Python 3.10+, no dependencies. `python -m mustra` with no arguments
