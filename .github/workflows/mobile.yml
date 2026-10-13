@@ -132,8 +132,15 @@ jobs:
   pages:
     # Needs: the repository public (or a paid plan) and Settings → Pages →
     # Source: GitHub Actions. Until then this job fails without blocking the rest.
+    # Deploy from pushes only: a release run (workflow_dispatch) on main starts
+    # seconds after the push run for the same commit, and two simultaneous
+    # deployments make one of them fail. The concurrency group queues any
+    # remaining overlap instead.
     needs: web
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     continue-on-error: true
     runs-on: ubuntu-latest
     environment:
