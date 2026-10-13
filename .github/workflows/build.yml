@@ -21,6 +21,8 @@ permissions:
 
 jobs:
   build:
+    # Keep this name stable: the "Protect main" ruleset requires these checks by name.
+    name: build (${{ matrix.os }}, ${{ matrix.asset }})
     strategy:
       fail-fast: false
       matrix:
