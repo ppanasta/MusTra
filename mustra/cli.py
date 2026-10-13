@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import textwrap
 
-from . import arabic, builder, pitch
+from . import arabic, builder, corrections, pitch
 from .data import DROMOI, MAKAMS
 
 LEGEND = ("Koma accidentals: ♭¹ = one koma (≈23¢) flat, ♯⁴ = four komas sharp, "
@@ -65,6 +66,7 @@ def cmd_list(_args) -> None:
 def cmd_makam(args) -> None:
     _, makam = builder.find_makam(args.name)
     print(f"Makam {makam.name}: {makam.description}")
+    _print_correction("makam", builder.find_makam(args.name)[0])
     print(f"Seyir: {makam.seyir}; güçlü (dominant): degree {makam.guclu + 1}")
     print(_equivalents_line("makam", builder.find_makam(args.name)[0]))
     directions = ["asc", "desc"] if makam.descending or args.both else ["asc"]
@@ -76,6 +78,7 @@ def cmd_makam(args) -> None:
 def cmd_dromos(args) -> None:
     _, dromos = builder.find_dromos(args.name)
     print(f"Dromos {dromos.name} ({dromos.greek}): {dromos.description}")
+    _print_correction("dromos", builder.find_dromos(args.name)[0])
     print(_equivalents_line("dromos", builder.find_dromos(args.name)[0]))
     directions = ["asc", "desc"] if dromos.descending else ["asc"]
     for direction in directions:
@@ -128,6 +131,7 @@ def cmd_identify(args) -> None:
 def cmd_arabic(args) -> None:
     key, maqam = arabic.find_maqam(args.name)
     print(f"Maqam {maqam.name} ({maqam.arabic}): {maqam.description}")
+    _print_correction("arabic", key)
     print(f"Ghammaz (dominant): degree {maqam.ghammaz + 1}")
     print(_equivalents_line("arabic", key))
     tonic = args.tonic or maqam.tonic
@@ -159,6 +163,14 @@ def cmd_arabic(args) -> None:
         print(line)
     print("\nQuarter-tone accidentals: ½♭ = half-flat, ½♯ = half-sharp (50¢). "
           "Arabic intonation of the half-flat notes varies by region.")
+
+
+def _print_correction(kind: str, key: str) -> None:
+    lines = corrections.page_notes(kind, key)
+    if lines:
+        print("✎ With your corrections (suggestions, only on this computer):")
+        for line in lines:
+            print(_wrap(line))
 
 
 def _scale_args(args) -> tuple[str, str]:
@@ -232,11 +244,128 @@ def cmd_add_song(args) -> None:
         print(f"Added [{song_id}] '{args.title}' to {kind} {scale_name(kind, key)}.")
 
 
+def _apply_saved_corrections(args) -> None:
+    """Use the user's corrections in every command (without creating a database)."""
+    from .songs import default_db_path
+    path = args.db or default_db_path()
+    if str(path) != ":memory:" and os.path.exists(path):
+        with _store(args) as store:
+            for message in store.apply_corrections():
+                print(f"note: correction not used: {message}", file=sys.stderr)
+
+
 def cmd_export(args) -> None:
     with _store(args) as store:
         data = store.export_json(args.file)
-    print(f"Wrote {len(data['songs'])} suggestion(s) and {len(data['reports'])} "
-          f"report(s) to {args.file}.")
+    print(f"Wrote {len(data['songs'])} song suggestion(s), {len(data['reports'])} "
+          f"report(s) and {len(data['corrections'])} theory correction(s) to {args.file}.")
+
+
+# Command-line option -> field of each kind.
+CORRECTION_OPTIONS = {
+    "tonic": {"dromos": "tonic", "makam": "tonic", "arabic": "tonic"},
+    "steps": {"makam": "steps", "arabic": "steps"},
+    "ascending": {"dromos": "ascending"},
+    "descending": {"dromos": "descending"},
+    "dominant": {"makam": "guclu", "arabic": "ghammaz"},
+    "parent": {"dromos": "makam", "arabic": "makam"},
+}
+
+
+def cmd_correct(args) -> None:
+    key = corrections.find(args.kind, args.name)
+    form = {}
+    for option, fields in CORRECTION_OPTIONS.items():
+        value = getattr(args, option)
+        if value is None:
+            continue
+        if args.kind not in fields:
+            raise ValueError(f"--{option} does not apply to a {corrections.KIND_LABELS[args.kind]}.")
+        form[fields[args.kind]] = value
+    with _store(args) as store:
+        store.apply_corrections()
+        changes = corrections.parse_form(args.kind, key, form)
+        store.suggest_correction(args.kind, key, changes, args.comment or "")
+        name = corrections.scale_name(args.kind, key)
+        print(f"Saved your correction of {name} (a new version; roll back any time):")
+        for line in corrections.describe(args.kind, key) or ["Original theory"]:
+            print(_wrap(line))
+    print(_wrap(corrections.BANNER, ""))
+
+
+def _history_lines(versions) -> None:
+    for v in versions:
+        mark = "  ← in use" if v.active else ""
+        print(f"  version {v.number}  {v.created_at}  {v.action}{mark}")
+        for line in v.summary:
+            print(_wrap(line, "      "))
+        if v.comment:
+            print(_wrap(f"“{v.comment}”", "      "))
+
+
+def cmd_history(args) -> None:
+    with _store(args) as store:
+        if args.kind:
+            if not args.name:
+                raise ValueError("Give the name too, e.g. history makam ussak.")
+            key = corrections.find(args.kind, args.name)
+            versions = store.correction_history(args.kind, key)
+            print(f"{corrections.KIND_LABELS[args.kind]} {corrections.scale_name(args.kind, key)}")
+            print("  version 0  original theory" + ("" if any(v.active and v.changes
+                                                               for v in versions)
+                                                    else "  ← in use"))
+            _history_lines(versions)
+            return
+        versions = store.correction_history()
+        if not versions:
+            print("No corrections yet. Suggest one with: correct KIND NAME --steps … "
+                  "--comment …")
+            return
+        scales = dict.fromkeys((v.kind, v.scale) for v in versions)
+        for kind, key in scales:
+            print(f"{corrections.KIND_LABELS[kind]} {corrections.scale_name(kind, key)}")
+            _history_lines([v for v in versions if (v.kind, v.scale) == (kind, key)])
+
+
+def cmd_rollback(args) -> None:
+    key = corrections.find(args.kind, args.name)
+    with _store(args) as store:
+        store.apply_corrections()
+        if args.version == 0:
+            store.reset_correction(args.kind, key)
+        else:
+            versions = {v.number: v for v in store.correction_history(args.kind, key)}
+            if args.version not in versions:
+                raise ValueError(f"No version {args.version}; see: history {args.kind} {args.name}")
+            store.rollback_correction(args.kind, key, versions[args.version].id)
+        print(f"{corrections.scale_name(args.kind, key)} is back to version {args.version}:")
+        for line in corrections.describe(args.kind, key) or ["Original theory"]:
+            print(_wrap(line))
+
+
+def cmd_review(args) -> None:
+    """For the admin: list the theory suggestions in a contributions file."""
+    import json
+    from pathlib import Path
+    data = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    if data.get("format") != "mustra-contributions":
+        raise ValueError(f"{args.file} is not a MusTra contributions file.")
+    items = data.get("corrections", [])
+    if not items:
+        print("No theory corrections in this file.")
+        return
+    print(f"{len(items)} suggested theory correction(s). Nothing changes until you edit "
+          "mustra/data.py (or arabic.py) and release it.")
+    for item in items:
+        kind, key = item["kind"], item["scale"]
+        table = "arabic.py MAQAMAT" if kind == "arabic" else (
+            "data.py DROMOI" if kind == "dromos" else "data.py MAKAMS")
+        print(f"\n{corrections.KIND_LABELS[kind]} {item['name']}  ({table}[{key!r}])")
+        for line in item["summary"]:
+            print(_wrap(line))
+        for comment in item.get("comments", []):
+            print(_wrap(f"“{comment}”"))
+        print(f"    {len(item.get('history', []))} version(s) in the user's history")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -293,12 +422,43 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--source", help="where the attribution comes from")
     p.set_defaults(func=cmd_add_song)
 
-    p = sub.add_parser("export", help="save your suggestions and reports to JSON")
+    p = sub.add_parser("export", help="save your songs, reports and corrections to JSON")
     p.add_argument("file")
     p.set_defaults(func=cmd_export)
 
+    p = sub.add_parser(
+        "correct", help="suggest a correction to the theory of a scale (only on this computer)",
+        description=corrections.BANNER)
+    p.add_argument("kind", choices=corrections.KINDS)
+    p.add_argument("name")
+    p.add_argument("--tonic", help="e.g. D (makam: B-1; Arabic: Ed)")
+    p.add_argument("--steps", help='makam: 7 koma steps summing to 53; Arabic: 7 quarter-tone '
+                                   'steps summing to 24, e.g. "8 5 9 9 4 9 9"')
+    p.add_argument("--ascending", help='dromos: frets going up, e.g. "0 1 3 5 7 8 10"')
+    p.add_argument("--descending", help='dromos: frets coming down ("" = same as going up)')
+    p.add_argument("--dominant", help="makam güçlü / Arabic ghammaz: degree 1-7")
+    p.add_argument("--parent", help="dromos: parent makam (or none); Arabic: Turkish makam")
+    p.add_argument("--comment", help="what is wrong and why (your source)")
+    p.set_defaults(func=cmd_correct)
+
+    p = sub.add_parser("history", help="show your corrections and every earlier version")
+    p.add_argument("kind", nargs="?", choices=corrections.KINDS)
+    p.add_argument("name", nargs="?")
+    p.set_defaults(func=cmd_history)
+
+    p = sub.add_parser("rollback", help="go back to an earlier version of your correction")
+    p.add_argument("kind", choices=corrections.KINDS)
+    p.add_argument("name")
+    p.add_argument("version", type=int, help="number from `history` (0 = the original)")
+    p.set_defaults(func=cmd_rollback)
+
+    p = sub.add_parser("review", help="admin: list the theory suggestions in an exported file")
+    p.add_argument("file")
+    p.set_defaults(func=cmd_review)
+
     args = parser.parse_args(argv)
     try:
+        _apply_saved_corrections(args)
         args.func(args)
     except (KeyError, ValueError) as exc:
         print(f"error: {exc.args[0]}", file=sys.stderr)

@@ -171,6 +171,23 @@ def test_gui_builds_every_view(monkeypatch, tmp_path):
         app._suggest_dialog()
         for d in [w for w in app.winfo_children() if isinstance(w, tk.Toplevel)]:
             d.destroy()
+        # theory corrections: dialog for each kind, save, roll back
+        for kind, key in (("dromos", "ousak"), ("makam", "ussak"), ("arabic", "bayati")):
+            app._correct_dialog(kind, key)
+            for d in [w for w in app.winfo_children() if isinstance(w, tk.Toplevel)]:
+                d.destroy()
+        app.store.suggest_correction("makam", "ussak", {"steps": [7, 6, 9, 9, 4, 9, 9]})
+        app.mode.set("Dromos")
+        app._mode_changed()
+        app.name.set("Ousak")
+        app.run()
+        assert "Your corrections are in use" in "".join(
+            w.cget("text") for card in app.output.winfo_children()
+            for w in card.winfo_children() if isinstance(w, tk.Label))
+        app._correct_dialog("makam", "ussak")
+        for d in [w for w in app.winfo_children() if isinstance(w, tk.Toplevel)]:
+            d.destroy()
+        app.store.reset_correction("makam", "ussak")
         app.mode.set("Identify")
         app._mode_changed()
         app.notes.insert(0, "D Eb F# G")

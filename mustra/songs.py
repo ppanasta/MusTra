@@ -11,6 +11,10 @@ them to a file that can be shared or merged into the seed list.
 * ``reports`` — "this song is not in X, it is in Y": a song can be reported
   any number of times.  A reported song is also offered under the scale the
   report names, flagged as a user correction.
+* ``corrections`` — the user's suggested corrections to the theory of a
+  dromos, makam or Arabic maqam (see ``corrections.py``).  Rows are never
+  changed or deleted: every save, roll-back and reset adds a version, and the
+  newest version of a scale is the one in use.
 """
 
 from __future__ import annotations
@@ -24,10 +28,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import corrections
 from .data import DROMOI, MAKAMS
 from .songs_seed import SEED_SONGS
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KINDS = ("dromos", "makam")
 
 SCHEMA = """
@@ -60,6 +65,16 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS reports_song ON reports (song_id);
+CREATE TABLE IF NOT EXISTS corrections (
+    id          INTEGER PRIMARY KEY,
+    kind        TEXT NOT NULL CHECK (kind IN ('dromos', 'makam', 'arabic')),
+    scale       TEXT NOT NULL,             -- key into DROMOI / MAKAMS / MAQAMAT
+    changes     TEXT NOT NULL,             -- JSON: fields that differ from the original
+    comment     TEXT NOT NULL DEFAULT '',
+    action      TEXT NOT NULL CHECK (action IN ('edit', 'rollback', 'reset')),
+    created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS corrections_scale ON corrections (kind, scale, id);
 CREATE INDEX IF NOT EXISTS reports_scale ON reports (kind, scale);
 """
 
@@ -86,6 +101,24 @@ class Song:
     @property
     def disputed(self) -> bool:
         return bool(self.reports)
+
+
+@dataclass
+class CorrectionVersion:
+    id: int
+    number: int          # 1, 2, 3 … per scale (0 is the original theory)
+    kind: str
+    scale: str
+    changes: dict
+    comment: str
+    action: str          # "edit", "rollback" or "reset"
+    created_at: str
+    active: bool = False  # the version in use
+
+    @property
+    def summary(self) -> list[str]:
+        return corrections.describe(self.kind, self.scale, self.changes) or [
+            "Original theory"]
 
 
 def scale_name(kind: str, scale: str) -> str:
@@ -158,7 +191,7 @@ class SongStore:
     def _migrate(self) -> None:
         with self.db:
             self.db.executescript(SCHEMA)
-            self.db.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)",
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)",
                             (str(SCHEMA_VERSION),))
 
     def _seed(self) -> None:
@@ -268,8 +301,103 @@ class SongStore:
                  scale, source.strip() or "Suggested by a user", source_url.strip()))
         return cur.lastrowid
 
+    # -- theory corrections --------------------------------------------------
+    def correction_history(self, kind: str | None = None,
+                           scale: str | None = None) -> list[CorrectionVersion]:
+        """Every version of the user's corrections, oldest first."""
+        query, params = "SELECT * FROM corrections", []
+        if kind is not None:
+            query += " WHERE kind = ? AND scale = ?"
+            params = [kind, scale]
+        rows = self.db.execute(query + " ORDER BY id", params).fetchall()
+        numbers: dict[tuple[str, str], int] = {}
+        latest: dict[tuple[str, str], int] = {}
+        out = []
+        for r in rows:
+            where = (r["kind"], r["scale"])
+            numbers[where] = numbers.get(where, 0) + 1
+            latest[where] = r["id"]
+            out.append(CorrectionVersion(
+                r["id"], numbers[where], r["kind"], r["scale"], json.loads(r["changes"]),
+                r["comment"], r["action"], r["created_at"]))
+        for version in out:
+            version.active = latest[(version.kind, version.scale)] == version.id
+        return out
+
+    def active_corrections(self) -> dict[tuple[str, str], dict]:
+        """The version in use for every corrected scale: {(kind, scale): changes}."""
+        return {(v.kind, v.scale): v.changes for v in self.correction_history()
+                if v.active and v.changes}
+
+    def apply_corrections(self) -> list[str]:
+        """Install the user's corrections into the theory tables."""
+        return corrections.apply(self.active_corrections())
+
+    def _add_version(self, kind: str, scale: str, changes: dict, comment: str,
+                     action: str) -> int:
+        with self.db:
+            cur = self.db.execute(
+                "INSERT INTO corrections (kind, scale, changes, comment, action) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (kind, scale, json.dumps(changes, ensure_ascii=False, sort_keys=True),
+                 comment.strip(), action))
+        self.apply_corrections()
+        return cur.lastrowid
+
+    def suggest_correction(self, kind: str, scale: str, changes: dict,
+                           comment: str = "") -> int:
+        """Save a corrected version of a scale (changes as from parse_form)."""
+        corrections.validate(kind, scale, changes)
+        current = self.active_corrections().get((kind, scale), {})
+        if changes == current and not comment.strip():
+            raise ValueError("Nothing changed. Edit a value, or write what is wrong "
+                             "in the comment.")
+        return self._add_version(kind, scale, changes, comment,
+                                 "edit" if changes else "reset")
+
+    def rollback_correction(self, kind: str, scale: str, version_id: int) -> int:
+        """Go back to an earlier version (0 = the original theory)."""
+        if int(version_id) == 0:
+            return self.reset_correction(kind, scale)
+        history = {v.id: v for v in self.correction_history(kind, scale)}
+        target = history.get(int(version_id))
+        if target is None:
+            raise ValueError("That version does not exist for this scale.")
+        if target.active:
+            raise ValueError("That version is already in use.")
+        corrections.validate(kind, scale, target.changes)
+        return self._add_version(kind, scale, target.changes,
+                                 f"Rolled back to version {target.number}", "rollback")
+
+    def reset_correction(self, kind: str, scale: str) -> int:
+        """Go back to the original theory (kept as a new version)."""
+        corrections.original(kind, scale)
+        if not self.active_corrections().get((kind, scale)):
+            raise ValueError("This scale already uses the original theory.")
+        return self._add_version(kind, scale, {}, "Back to the original theory", "reset")
+
+    def suggestions(self) -> list[dict]:
+        """The user's corrections in use, for export and admin review."""
+        out = []
+        for (kind, scale), changes in self.active_corrections().items():
+            history = self.correction_history(kind, scale)
+            out.append({
+                "kind": kind, "scale": scale, "name": corrections.scale_name(kind, scale),
+                "changes": changes,
+                "original": {k: v for k, v in corrections.original_values(kind, scale).items()
+                             if k in changes},
+                "suggested": {f.name: corrections.format_value(f, changes[f.name])
+                              for f in corrections.FIELDS[kind] if f.name in changes},
+                "summary": corrections.describe(kind, scale, changes),
+                "comments": [v.comment for v in history if v.comment and v.action == "edit"],
+                "history": [{"version": v.number, "action": v.action, "changes": v.changes,
+                             "comment": v.comment, "created_at": v.created_at}
+                            for v in history],
+            })
+        return out
+
     def export_json(self, path: str | Path) -> dict:
-        """Write the user's suggestions and reports to a JSON file."""
+        """Write the user's suggestions, reports and theory corrections to JSON."""
         songs = [dict(r) for r in self.db.execute(
             "SELECT title, artist, year, rhythm, song_key, kind, scale, source, "
             "source_url, created_at FROM songs WHERE origin = 'user' ORDER BY id")]
@@ -278,6 +406,6 @@ class SongStore:
             "r.kind AS reported_kind, r.scale AS reported_scale, r.comment, r.created_at "
             "FROM reports r JOIN songs s ON s.id = r.song_id ORDER BY r.id")]
         data = {"format": "mustra-contributions", "version": SCHEMA_VERSION,
-                "songs": songs, "reports": reports}
+                "songs": songs, "reports": reports, "corrections": self.suggestions()}
         Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return data
