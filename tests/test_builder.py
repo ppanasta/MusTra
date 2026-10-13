@@ -179,3 +179,10 @@ def test_gui_builds_every_view(monkeypatch, tmp_path):
         assert "Hijaz" in app.output.get("1.0", "end")
     finally:
         app.destroy()
+
+
+def test_icon_data_holds_pngs():
+    import base64
+    from mustra import icon_data
+    for name in ("ICON_32", "ICON_64", "ICON_128", "LOGO_96"):
+        assert base64.b64decode(getattr(icon_data, name)).startswith(b"\x89PNG\r\n\x1a\n")

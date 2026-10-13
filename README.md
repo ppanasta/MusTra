@@ -66,11 +66,22 @@ To write the text of a release, add `release-notes/<tag>.md` (e.g.
 `release-notes/v1.1.0.md`) and push: the *Release notes* workflow copies it
 into the GitHub Release with that tag.
 
+### Logo
+
+The logo is a temporary design (a canary-shaped guitar pick with an **M**
+wing on a **T** perch) kept as one file, `assets/logo.svg`. Every icon is
+rendered from it by `python mobile/make_icons.py` (needs Playwright and
+Pillow): the web app and iPhone icons, the Android launcher icons, the
+desktop window icon (`mustra/icon_data.py`) and the `.exe`/macOS app icons
+(`assets/mustra.ico`, `assets/mustra.png`). To switch to a new logo, export
+it as `assets/logo.svg` (100×100 viewBox) and re-run the script.
+
 ### Building it yourself
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name MusTra run_gui.py   # -> dist/
+pip install pillow   # converts the icon for macOS
+pyinstaller --onefile --windowed --name MusTra --icon assets/mustra.ico run_gui.py   # -> dist/
 ```
 
 PyInstaller builds for the system it runs on, so build the Windows `.exe` on

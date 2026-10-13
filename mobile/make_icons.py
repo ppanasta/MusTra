@@ -1,69 +1,89 @@
-"""Draw the MusTra app icons (web app and Android launcher). Needs Pillow.
+"""Render every MusTra icon from assets/logo.svg.
 
-    python mobile/make_icons.py
+    python mobile/make_icons.py      # needs Playwright (Chromium) and Pillow
+
+The logo is one SVG with a rounded purple tile (#tile) and the artwork
+(#art). From it this script writes:
+
+* mobile/web/icons/   logo.svg, icon-192/512.png, icon-maskable-512.png
+                      (art inside the 80% safe zone), apple-touch-icon.png
+                      (square; iOS rounds the corners itself)
+* mobile/android/.../mipmap-*/ic_launcher.png
+* assets/mustra.png, assets/mustra.ico   (desktop executables)
+* mustra/icon_data.py  (base64 PNGs for the desktop window and welcome page)
+
+To use a new logo (e.g. from Figma), export it as assets/logo.svg with a
+100x100 viewBox and re-run this script.
 """
 
+import base64
+import io
+import os
+import re
+import shutil
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
+from playwright.sync_api import sync_playwright
 
-ROOT = Path(__file__).resolve().parent
-PURPLE, PURPLE_DARK, WHITE = (106, 63, 160), (75, 42, 120), (255, 255, 255)
-FONTS = ["DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-         "Arial Bold.ttf", "arialbd.ttf"]
-
-
-def font(size):
-    for name in FONTS:
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
+ROOT = Path(__file__).resolve().parent.parent
+SOURCE = ROOT / "assets" / "logo.svg"
 
 
-def draw(size, padding=0.0, rounded=True):
-    """Purple tile with 'Mu' over a small staff line: MusTra's monogram."""
-    scale = 4
-    s = size * scale
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    radius = int(s * 0.22) if rounded else 0
-    d.rounded_rectangle([0, 0, s - 1, s - 1], radius=radius, fill=PURPLE)
-    inner = s * (1 - 2 * padding)
-    off = s * padding
-    f = font(int(inner * 0.42))
-    text = "Mu"
-    box = d.textbbox((0, 0), text, font=f)
-    w, h = box[2] - box[0], box[3] - box[1]
-    d.text((off + (inner - w) / 2 - box[0], off + inner * 0.40 - h / 2 - box[1]), text, font=f, fill=WHITE)
-    # three staff lines with a quarter-tone "neutral" mark: the 'Tra(nslations)'
-    for i in range(3):
-        y = off + inner * (0.70 + i * 0.065)
-        d.rounded_rectangle([off + inner * 0.2, y, off + inner * 0.8, y + inner * 0.022],
-                            radius=int(inner * 0.011), fill=(233, 223, 247))
-    cx, cy = off + inner * 0.62, off + inner * 0.735
-    r = inner * 0.055
-    d.ellipse([cx - r * 1.25, cy - r, cx + r * 1.25, cy + r], fill=WHITE, outline=PURPLE_DARK,
-              width=max(1, int(inner * 0.008)))
-    return img.resize((size, size), Image.LANCZOS)
+def variant(svg: str, *, square=False, safe_zone=False) -> str:
+    if square or safe_zone:
+        svg = svg.replace('rx="22"', 'rx="0"')
+    if safe_zone:
+        svg = svg.replace('<g id="art">', '<g id="art" transform="translate(10 10) scale(0.8)">')
+    return svg
 
 
-def main():
-    web = ROOT / "web" / "icons"
+def render(page, svg: str, size: int) -> Image.Image:
+    svg = re.sub(r'width="\d+" height="\d+"', f'width="{size}" height="{size}"', svg, count=1)
+    page.set_viewport_size({"width": size, "height": size})
+    page.set_content(f'<html><body style="margin:0;background:transparent">{svg}</body></html>')
+    png = page.locator("svg").screenshot(omit_background=True)
+    return Image.open(io.BytesIO(png)).convert("RGBA")
+
+
+def main() -> None:
+    svg = SOURCE.read_text(encoding="utf-8")
+    web = ROOT / "mobile" / "web" / "icons"
+    res = ROOT / "mobile" / "android" / "app" / "src" / "main" / "res"
     web.mkdir(parents=True, exist_ok=True)
-    draw(192).save(web / "icon-192.png")
-    draw(512).save(web / "icon-512.png")
-    draw(512, padding=0.1, rounded=False).save(web / "icon-maskable-512.png")
-    flat = Image.new("RGB", (180, 180), PURPLE)
-    flat.paste(draw(180, rounded=False), (0, 0), draw(180, rounded=False))
-    flat.save(web / "apple-touch-icon.png")   # iOS rounds the corners itself
-    res = ROOT / "android" / "app" / "src" / "main" / "res"
-    for name, px in {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}.items():
-        folder = res / f"mipmap-{name}"
-        folder.mkdir(parents=True, exist_ok=True)
-        draw(px).save(folder / "ic_launcher.png")
-    print("Icons written.")
+    shutil.copy2(SOURCE, web / "logo.svg")
+
+    exe = os.environ.get("CHROMIUM_PATH")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
+        page = browser.new_page()
+        rounded = lambda n: render(page, svg, n)  # noqa: E731
+        rounded(192).save(web / "icon-192.png")
+        rounded(512).save(web / "icon-512.png")
+        render(page, variant(svg, safe_zone=True), 512).save(web / "icon-maskable-512.png")
+        render(page, variant(svg, square=True), 180).convert("RGB").save(web / "apple-touch-icon.png")
+        for name, px in {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}.items():
+            folder = res / f"mipmap-{name}"
+            folder.mkdir(parents=True, exist_ok=True)
+            rounded(px).save(folder / "ic_launcher.png")
+        big = rounded(512)
+        big.save(ROOT / "assets" / "mustra.png")
+        big.save(ROOT / "assets" / "mustra.ico",
+                 sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+        data = {}
+        for name, px in (("ICON_32", 32), ("ICON_64", 64), ("ICON_128", 128), ("LOGO_96", 96)):
+            buf = io.BytesIO()
+            rounded(px).save(buf, "PNG", optimize=True)
+            data[name] = base64.b64encode(buf.getvalue()).decode("ascii")
+        browser.close()
+
+    lines = ['"""MusTra logo as base64 PNGs for Tk (generated by mobile/make_icons.py)."""', ""]
+    for name, value in data.items():
+        lines.append(f"{name} = (")
+        lines += [f'    "{value[i:i + 76]}"' for i in range(0, len(value), 76)]
+        lines.append(")")
+    (ROOT / "mustra" / "icon_data.py").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("Icons written from", SOURCE.relative_to(ROOT))
 
 
 if __name__ == "__main__":
