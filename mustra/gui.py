@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 from tkinter import ttk
 
-from . import arabic, builder
+from . import arabic, builder, icon_data
 from .cli import _equivalents_line
 from .data import DROMOI, MAKAMS
 from .songs import Song, SongStore, scale_name
@@ -94,6 +94,14 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("MusTra")
+        self._images = {}
+        try:  # window/taskbar icon; PNG photos need Tk 8.6+
+            self._images = {name: tk.PhotoImage(data=getattr(icon_data, name))
+                            for name in ("ICON_128", "ICON_64", "ICON_32", "LOGO_96")}
+            self.iconphoto(True, self._images["ICON_128"], self._images["ICON_64"],
+                           self._images["ICON_32"])
+        except tk.TclError:
+            pass
         self.geometry("960x720")
         self.minsize(760, 560)
         self.configure(bg=BG)
@@ -211,7 +219,11 @@ class App(tk.Tk):
         canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
 
-        self._label(page, "MusTra", "title", PRIMARY_DARK).pack(anchor="w")
+        brand = tk.Frame(page, bg=BG)
+        brand.pack(anchor="w")
+        if "LOGO_96" in self._images:
+            tk.Label(brand, image=self._images["LOGO_96"], bg=BG).pack(side="left", padx=(0, 16))
+        self._label(brand, "MusTra", "title", PRIMARY_DARK).pack(side="left")
         self._label(page, "Music & Translations  —  Greek dromoi  ·  Turkish makams  ·  "
                           "Arabic maqamat  ·  microtonal playing tips", "subtitle",
                     MUTED).pack(anchor="w")
