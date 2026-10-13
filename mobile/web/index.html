@@ -37,6 +37,7 @@
         <li>Pick a name. Optionally type a tonic: D, A, F#, Eb… For makams also B-1 (B lowered by one koma); for Arabic Ed (E half-flat).</li>
         <li>You get the notes, the original makam and Arabic maqam beside each dromos, and the playing tips: <b>↑</b> bend the note up, <b>↓</b> hold it low.</li>
         <li>Each page suggests a song from the literature. <b>Another</b> shows a new one; <b>Wrong?</b> lets you give the right dromos/makam and suggest a better song. Your corrections stay on this device.</li>
+        <li>Found a mistake in the theory of a dromos, makam or maqam? <b>Correct the theory</b> changes it on this device as a suggestion. Every version is kept, so you can roll back any time.</li>
         <li>Tap an equivalent (e.g. <i>Arabic Bayati</i>) to jump to it. <b>Back</b> returns here; <b>End</b> closes MusTra.</li>
       </ol>
     </section>
@@ -138,6 +139,24 @@
         <button value="cancel" class="ghost" formnovalidate>Cancel</button>
         <button id="suggest-save" class="primary" value="save">Save</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="correct-dialog">
+    <form method="dialog" id="correct-form">
+      <h2 id="correct-title">Correct the theory</h2>
+      <p class="banner" id="correct-banner"></p>
+      <div id="correct-fields"></div>
+      <label><span>What is wrong, and how do you know? (your source)</span>
+        <textarea id="correct-comment" rows="3"></textarea></label>
+      <p class="error small" id="correct-error"></p>
+      <div class="actions end">
+        <button value="cancel" class="ghost" formnovalidate>Close</button>
+        <button id="correct-save" class="primary" value="save">Save as new version</button>
+      </div>
+      <h3>Your versions</h3>
+      <p class="muted small">Nothing is ever deleted. Pick an earlier version to roll back to it.</p>
+      <ol class="history" id="correct-history"></ol>
     </form>
   </dialog>
 

@@ -133,3 +133,17 @@ dialog label { display: block; margin-bottom: 10px; }
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%);
   background: var(--primary-dark); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .92rem;
   box-shadow: 0 6px 20px rgba(0,0,0,.2); max-width: 90vw; }
+
+.theory { border: 1.5px dashed var(--primary); border-radius: var(--radius); padding: 10px 14px; margin: 4px 0 14px; }
+.theory p { margin: 4px 0; }
+.theory .corrected { color: var(--primary-dark); font-weight: 600; }
+.banner { background: var(--primary-light); color: var(--primary-dark); border-left: 4px solid var(--primary);
+  border-radius: 8px; padding: 10px 12px; font-size: .9rem; margin: 0 0 12px; }
+dialog .field small { display: block; color: var(--muted); font-size: .8rem; margin-top: 3px; }
+textarea { font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px;
+  border: 1.5px solid var(--primary-light); background: var(--card); color: var(--text); }
+.history { list-style: none; padding: 0; margin: 6px 0 0; }
+.history li { border-top: 1px solid var(--primary-light); padding: 8px 0; }
+.history .head { font-weight: 700; color: var(--primary-dark); }
+.history .active { color: var(--primary); font-size: .85rem; font-weight: 700; }
+.history p { margin: 2px 0; font-size: .9rem; }

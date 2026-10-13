@@ -92,7 +92,7 @@ def test_songs_flow(store, tmp_path):
     assert "Year must be a number" in call(webapi.add_song, "Y", "makam", "segah",
                                            year="abc")["error"]
     out = call(webapi.export_contributions, str(tmp_path / "e.json"))
-    assert out == {"songs": 2, "reports": 1}
+    assert out == {"songs": 2, "reports": 1, "corrections": 0}
 
 
 def test_arabic_pages_use_the_makam_songs(store):

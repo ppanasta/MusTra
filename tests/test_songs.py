@@ -124,7 +124,7 @@ def test_cli_song_commands(tmp_path, capsys):
     assert "Unknown makam" in capsys.readouterr().err
     assert main(["--db", db, "report", "1", "--dromos", "ousak", "--comment", "hm"]) == 0
     assert main(["--db", db, "export", str(tmp_path / "e.json")]) == 0
-    assert "1 suggestion(s) and 1 report(s)" in capsys.readouterr().out
+    assert "1 song suggestion(s), 1 report(s) and 0 theory correction(s)" in capsys.readouterr().out
 
 
 def test_data_from_before_the_rename_is_migrated(monkeypatch, tmp_path):

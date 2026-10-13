@@ -162,6 +162,7 @@ function run() {
     el("h2", { class: "result-title" }, page.title),
     page.subtitle ? el("p", { class: "result-sub" }, page.subtitle) : null,
     el("p", {}, page.description),
+    renderTheory(page),
     renderEquivalents(page.equivalents),
     songBox,
     page.sections.map(renderSection),
@@ -169,6 +170,18 @@ function run() {
     page.legend.map((line) => el("p", { class: "legend" }, line)),
   ].flat(Infinity).filter(Boolean));
   renderSongs({ pick: true });
+}
+
+function renderTheory(page) {
+  const lines = page.corrections || [];
+  return el("div", { class: "theory" },
+    lines.length
+      ? [el("p", { class: "corrected" }, "✎ Your corrections are in use (only on this device):"),
+         lines.map((line) => el("p", { class: "small" }, line))]
+      : el("p", { class: "muted small" }, "Found a mistake in this theory? Suggest a correction."),
+    el("div", { class: "actions" },
+      el("button", { class: "small", type: "button", onclick: () => openCorrect(page.kind, page.key) },
+        lines.length ? "Correct again / history" : "Correct the theory")));
 }
 
 function renderEquivalents(items) {
@@ -346,7 +359,73 @@ function exportContributions() {
   const a = el("a", { href: url, download: name });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
-  toast(`Exported ${out.songs} song(s) and ${out.reports} report(s).`);
+  toast(`Exported ${out.songs} song(s), ${out.reports} report(s) and ${out.corrections} correction(s).`);
+}
+
+// -- theory corrections -----------------------------------------------------------
+
+function openCorrect(kind, key) {
+  const form = call("correction_form", kind, key);
+  if (form.error) { toast(form.error); return; }
+  state.correct = form;
+  $("correct-title").textContent = `Correct ${form.kind_label} ${form.name}`;
+  $("correct-banner").textContent = form.banner;
+  $("correct-comment").value = "";
+  $("correct-error").textContent = "";
+  $("correct-fields").replaceChildren(...form.fields.map((f) => {
+    const input = f.type === "makam"
+      ? el("select", { id: "correct-" + f.name },
+          kind === "dromos" ? el("option", { value: "" }, "none (Greek-born)") : null,
+          form.makams.map((m) => el("option", { value: m.key }, m.name)))
+      : el("input", { id: "correct-" + f.name, spellcheck: "false", autocapitalize: "off" });
+    input.value = f.value;
+    const was = f.type === "makam"
+      ? (form.makams.find((m) => m.key === f.original) || { name: "none (Greek-born)" }).name
+      : (f.original || "same as going up");
+    return el("label", { class: "field" }, el("span", {}, f.label), input,
+      el("small", {}, `${f.hint}. Original: ${was}`));
+  }));
+  const history = $("correct-history");
+  const items = form.history.map((v) => el("li", {},
+    el("p", { class: "head" }, `Version ${v.number} · ${v.created_at} · ${v.action}`,
+      v.active ? el("span", { class: "active" }, "  in use") : null),
+    v.summary.map((line) => el("p", {}, line)),
+    v.comment ? el("p", { class: "muted" }, `“${v.comment}”`) : null,
+    v.active ? null : el("button", { class: "small", type: "button",
+      onclick: () => rollback(v.id, `version ${v.number}`) }, "Use this version")));
+  items.push(el("li", {},
+    el("p", { class: "head" }, "Version 0 · original theory",
+      form.corrected ? null : el("span", { class: "active" }, "  in use")),
+    form.corrected ? el("button", { class: "small", type: "button",
+      onclick: () => rollback(0, "the original theory") }, "Back to the original") : null));
+  history.replaceChildren(...items);
+  $("correct-dialog").showModal();
+}
+
+async function afterCorrection(message) {
+  await persist();
+  state.catalog = call("catalog");
+  const { kind, key } = state.correct;
+  $("correct-dialog").close();
+  if (state.mode === kind) setMode(kind, key); else run();
+  toast(message);
+}
+
+async function saveCorrect(event) {
+  event.preventDefault();
+  const { kind, key, fields } = state.correct;
+  const form = {};
+  for (const f of fields) form[f.name] = $("correct-" + f.name).value;
+  const out = call("save_correction", kind, key, JSON.stringify(form), $("correct-comment").value);
+  if (out.error) { $("correct-error").textContent = out.error; return; }
+  await afterCorrection("Saved as a new version on this device. Roll back any time.");
+}
+
+async function rollback(versionId, label) {
+  const { kind, key } = state.correct;
+  const out = call("rollback_correction", kind, key, versionId);
+  if (out.error) { $("correct-error").textContent = out.error; return; }
+  await afterCorrection(`Back to ${label}.`);
 }
 
 // -- wiring ---------------------------------------------------------------------------
@@ -373,6 +452,7 @@ $("controls").addEventListener("submit", (e) => { e.preventDefault(); run(); });
 $("name").addEventListener("change", () => { $("tonic").value = ""; updateTonicPlaceholder(); run(); });
 $("report-save").addEventListener("click", saveReport);
 $("suggest-save").addEventListener("click", saveSuggest);
+$("correct-save").addEventListener("click", saveCorrect);
 
 if ("serviceWorker" in navigator && !ANDROID && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch((e) => console.warn("No offline cache:", e));

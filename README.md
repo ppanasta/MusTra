@@ -199,11 +199,47 @@ python -m mustra add-song "Title" --dromos ousak --artist "Composer" --year 1936
 python -m mustra export my_contributions.json
 ```
 
+## Correcting the theory (suggestions)
+
+Think a dromos, makam or Arabic maqam is wrong? Every page has a **Correct
+the theory** button. You can change:
+
+| Scale | What you can correct |
+|---|---|
+| Greek dromos | tonic, frets going up, frets coming down, parent makam (or none) |
+| Turkish makam | tonic, steps in komas (must add up to 53), güçlü (dominant) |
+| Arabic maqam | tonic, steps in quarter tones (must add up to 24), ghammaz, Turkish counterpart |
+
+Add a comment saying what is wrong and how you know (your source).
+
+* **It is a suggestion.** It changes only your copy of MusTra: tables, tips,
+  equivalents and *Identify* all use it from then on, and pages that use a
+  corrected scale say so. Everyone else keeps the shipped theory.
+* **Every version is kept.** Each save, roll-back and reset adds a version;
+  nothing is deleted. The dialog (or `history`) lists them all, and you can
+  go back to any version or to the original.
+* **Only the admin changes MusTra for everyone.** Corrections are included
+  in **Export**. The admin reviews them (`python -m mustra review FILE`),
+  edits `mustra/data.py` or `mustra/arabic.py`, and ships the accepted ones
+  in a release. A future release will let users send their suggestions by
+  email from the app.
+
+From the command line:
+
+```bash
+python -m mustra correct makam ussak --steps "7 6 9 9 4 9 9" --comment "Segah is lower in practice (source…)"
+python -m mustra correct dromos ousak --parent kurdi
+python -m mustra history                   # all your corrections and their versions
+python -m mustra rollback makam ussak 0    # back to the original (or any version number)
+python -m mustra review contributions.json # admin: list the suggestions in an export
+```
+
 ### Where the data lives
 
 A **SQLite** database (`songs.sqlite3`): SQLite is built into Python, so the
 executable stays a single file, and it stores the songs ↔ reports relation
-with real queries. It is created on first use in the user's data folder:
+and the history of your theory corrections with real queries. It is created
+on first use in the user's data folder:
 
 | System | Location |
 |---|---|

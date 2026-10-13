@@ -12,7 +12,7 @@ import functools
 import json
 import random
 
-from . import arabic, builder, pitch
+from . import arabic, builder, corrections, pitch
 from .data import DROMOI, MAKAMS
 from .songs import Song, SongStore, scale_name
 
@@ -123,6 +123,7 @@ def dromos(key: str, tonic: str | None = None, a4: float = 440.0) -> dict:
                          "where": where, "text": tip.text})
     return {
         "kind": "dromos", "key": key, "title": d.name, "subtitle": d.greek,
+        "corrections": corrections.page_notes("dromos", key),
         "description": d.description + (f" From makam {parent}." if parent
                                          else " Greek-born, no makam parent."),
         "equivalents": _equivalents("dromos", key),
@@ -146,6 +147,7 @@ def makam(key: str, tonic: str | None = None, a4: float = 440.0) -> dict:
               f"{n.cents:.0f}", f"{n.frequency:.1f}"] for n in notes])})
     return {
         "kind": "makam", "key": key, "title": f"Makam {m.name}", "subtitle": "",
+        "corrections": corrections.page_notes("makam", key),
         "description": f"{m.description} Seyir: {m.seyir}; güçlü (dominant): "
                        f"degree {m.guclu + 1}.",
         "equivalents": _equivalents("makam", key),
@@ -190,6 +192,7 @@ def arabic_maqam(key: str, tonic: str | None = None, a4: float = 440.0) -> dict:
                               "(cents above the tonic)", **_table(cols, rows)})
     return {
         "kind": "arabic", "key": key, "title": f"Maqam {a.name}", "subtitle": a.arabic,
+        "corrections": corrections.page_notes("arabic", key),
         "description": f"{a.description} Ghammaz (dominant): degree {a.ghammaz + 1}.",
         "equivalents": _equivalents("arabic", key),
         "sections": sections, "tips": [], "notes": [], "legend": [LEGEND_QUARTER],
@@ -220,6 +223,7 @@ def open_store(path: str) -> None:
     if _store is not None:
         _store.close()
     _store = SongStore(path)
+    _store.apply_corrections()
 
 
 def _require_store() -> SongStore:
@@ -294,7 +298,51 @@ def add_song(title: str, kind: str, key: str, artist: str = "", year: str = "",
 @_json
 def export_contributions(path: str) -> dict:
     data = _require_store().export_json(path)
-    return {"songs": len(data["songs"]), "reports": len(data["reports"])}
+    return {"songs": len(data["songs"]), "reports": len(data["reports"]),
+            "corrections": len(data["corrections"])}
+
+
+# -- theory corrections ---------------------------------------------------------
+
+def _version(v) -> dict:
+    return {"id": v.id, "number": v.number, "action": v.action, "comment": v.comment,
+            "created_at": v.created_at, "active": v.active, "summary": v.summary}
+
+
+@_json
+def correction_form(kind: str, key: str) -> dict:
+    """Everything the "Correct the theory" dialog needs."""
+    store = _require_store()
+    corrections.original(kind, key)
+    current = corrections.form_values(kind, key)
+    original = corrections.original_values(kind, key)
+    history = store.correction_history(kind, key)
+    return {
+        "kind": kind, "key": key, "name": corrections.scale_name(kind, key),
+        "kind_label": corrections.KIND_LABELS[kind], "banner": corrections.BANNER,
+        "fields": [{"name": f.name, "label": f.label, "hint": f.hint, "type": f.type,
+                    "value": current[f.name], "original": original[f.name]}
+                   for f in corrections.FIELDS[kind]],
+        "makams": [{"key": k, "name": m.name} for k, m in MAKAMS.items()],
+        "corrected": corrections.is_corrected(kind, key),
+        "history": [_version(v) for v in reversed(history)],
+    }
+
+
+@_json
+def save_correction(kind: str, key: str, form: str, comment: str = "") -> dict:
+    """``form`` is a JSON object of field name -> text, as typed by the user."""
+    store = _require_store()
+    changes = corrections.parse_form(kind, key, json.loads(form))
+    store.suggest_correction(kind, key, changes, comment)
+    return {"ok": True, "summary": corrections.describe(kind, key)}
+
+
+@_json
+def rollback_correction(kind: str, key: str, version_id: int) -> dict:
+    """Go back to an earlier version; 0 = the original theory."""
+    _require_store().rollback_correction(kind, key, int(version_id))
+    return {"ok": True, "summary": corrections.describe(kind, key)}
 
 
 @_json

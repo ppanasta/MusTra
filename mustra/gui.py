@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 from tkinter import ttk
 
-from . import arabic, builder, icon_data
+from . import arabic, builder, corrections, icon_data
 from .cli import _equivalents_line
 from .data import DROMOI, MAKAMS
 from .songs import Song, SongStore, scale_name
@@ -69,6 +69,9 @@ STEPS = [
     "literature. Press Another song for a new one. If a song is in the wrong "
     "dromos/makam, press Wrong dromos? to give the right one and suggest a "
     "better song. Your corrections are saved on this computer.",
+    "Found a mistake in the theory of a dromos, makam or maqam? Press Correct the "
+    "theory: your correction changes it on this computer as a suggestion. Every "
+    "version is kept, so you can roll back any time.",
     "Back returns to this page; End closes the program.",
 ]
 
@@ -119,6 +122,10 @@ class App(tk.Tk):
         self._store: SongStore | None = None
         self.song_shown: Song | None = None
         self.songs_seen: set[int] = set()
+        try:  # the user's theory corrections apply to every page
+            self.store.apply_corrections()
+        except sqlite3.Error:
+            pass
 
         self.pages = {"welcome": self._welcome(), "main": self._main()}
         self.current = "welcome"
@@ -413,6 +420,7 @@ class App(tk.Tk):
         parent = MAKAMS[dromos.makam].name if dromos.makam else None
         origin = f"From makam {parent}." if parent else "Greek-born, no makam parent."
         self._write(f"{dromos.description}  {origin}\n", "muted")
+        self._theory_card("dromos", builder.find_dromos(name)[0])
         self._write(_equivalents_line("dromos", builder.find_dromos(name)[0]) + "\n", "equiv")
         self._song_panel("dromos", builder.find_dromos(name)[0])
 
@@ -480,6 +488,7 @@ class App(tk.Tk):
         self._write(f"Makam {makam.name}\n", "title")
         self._write(f"{makam.description}\nSeyir: {makam.seyir}  ·  güçlü (dominant): "
                     f"degree {makam.guclu + 1}\n", "muted")
+        self._theory_card("makam", builder.find_makam(name)[0])
         self._write(_equivalents_line("makam", builder.find_makam(name)[0]) + "\n", "equiv")
         self._song_panel("makam", builder.find_makam(name)[0])
         for direction in ("asc", "desc"):
@@ -495,6 +504,112 @@ class App(tk.Tk):
                      f"{n.cents:.1f}", f"{n.frequency:.2f}") for n in notes]
             self._table(columns, rows)
         self._write(LEGEND + "\n", "small")
+
+    # -- theory corrections ------------------------------------------------
+    def _theory_card(self, kind: str, key: str) -> None:
+        """Shows the user's corrections in use, with a button to correct."""
+        card = tk.Frame(self.output, bg=CARD, highlightbackground=PRIMARY,
+                        highlightthickness=1, padx=12, pady=8)
+        lines = corrections.page_notes(kind, key)
+        if lines:
+            self._label(card, "✎  Your corrections are in use (only on this computer):",
+                        "body", PRIMARY_DARK, CARD).pack(anchor="w")
+            for line in lines:
+                self._label(card, line, "small", TEXT, CARD, wraplength=760).pack(anchor="w")
+        else:
+            self._label(card, "Found a mistake in this theory? Suggest a correction.",
+                        "small", MUTED, CARD).pack(anchor="w")
+        ttk.Button(card, text="Correct again / history" if lines else "Correct the theory",
+                   style="Small.TButton",
+                   command=lambda: self._correct_dialog(kind, key)).pack(anchor="w", pady=(6, 0))
+        self.output.window_create("end", window=card, pady=6)
+        self._write("\n")
+
+    def _correct_dialog(self, kind: str, key: str) -> None:
+        name = corrections.scale_name(kind, key)
+        win, body = self._dialog(f"Correct {corrections.KIND_LABELS[kind]} {name}")
+        tk.Label(body, text=corrections.BANNER, font=self.fonts["small"], fg=PRIMARY_DARK,
+                 bg=PRIMARY_LIGHT, justify="left", anchor="w", wraplength=560,
+                 padx=10, pady=8).pack(fill="x", pady=(0, 10))
+
+        current = corrections.form_values(kind, key)
+        original = corrections.original_values(kind, key)
+        makam_names = {m.name: k for k, m in MAKAMS.items()}
+        none_label = "none (Greek-born)"
+        widgets = {}
+        for field in corrections.FIELDS[kind]:
+            self._label(body, field.label, "small", MUTED, CARD).pack(anchor="w")
+            if field.type == "makam":
+                values = ([none_label] if kind == "dromos" else []) + list(makam_names)
+                widget = ttk.Combobox(body, width=30, state="readonly", values=values)
+                widget.set(MAKAMS[current[field.name]].name if current[field.name]
+                           else none_label)
+                was = MAKAMS[original[field.name]].name if original[field.name] else none_label
+            else:
+                widget = ttk.Entry(body, width=40)
+                widget.insert(0, current[field.name])
+                was = original[field.name] or "same as going up"
+            widget.pack(anchor="w")
+            self._label(body, f"{field.hint}. Original: {was}", "small", MUTED, CARD,
+                        wraplength=560).pack(anchor="w", pady=(0, 6))
+            widgets[field.name] = widget
+        comment = self._entry(body, "What is wrong, and how do you know? (your source)", 64)
+
+        def form() -> dict:
+            out = {}
+            for field_name, widget in widgets.items():
+                value = widget.get()
+                out[field_name] = makam_names.get(value, "") if isinstance(
+                    widget, ttk.Combobox) else value
+            return out
+
+        def save():
+            changes = corrections.parse_form(kind, key, form())
+            self.store.suggest_correction(kind, key, changes, comment.get())
+            self.run()
+
+        error = self._dialog_buttons(win, body, save)
+        self._history(win, body, kind, key, error)
+
+    def _history(self, win, body, kind: str, key: str, error: tk.Label) -> None:
+        versions = self.store.correction_history(kind, key)
+        self._label(body, "Your versions (nothing is ever deleted)", "heading",
+                    PRIMARY_DARK, CARD).pack(anchor="w", pady=(14, 4))
+        tree = ttk.Treeview(body, columns=("Version", "Date", "Action", "Changes"),
+                            show="headings", height=min(len(versions) + 1, 6),
+                            style="Result.Treeview", selectmode="browse")
+        for col, width in (("Version", 80), ("Date", 150), ("Action", 90), ("Changes", 380)):
+            tree.heading(col, text=col, anchor="w")
+            tree.column(col, width=width, anchor="w", stretch=False)
+        by_iid = {}
+        for v in reversed(versions):
+            text = "; ".join(v.summary) + (f" — “{v.comment}”" if v.comment else "")
+            iid = tree.insert("", "end", values=(
+                f"{v.number}{'  ✓ in use' if v.active else ''}", v.created_at, v.action, text))
+            by_iid[iid] = v
+        in_use = corrections.is_corrected(kind, key)
+        tree.insert("", "end", iid="original", values=(
+            f"0{'' if in_use else '  ✓ in use'}", "", "original", "The theory shipped with MusTra"))
+        tree.pack(anchor="w")
+
+        def roll_back():
+            selected = tree.selection()
+            if not selected:
+                error.configure(text="Pick a version in the list first.")
+                return
+            try:
+                if selected[0] == "original":
+                    self.store.reset_correction(kind, key)
+                else:
+                    self.store.rollback_correction(kind, key, by_iid[selected[0]].id)
+            except (KeyError, ValueError, sqlite3.Error) as exc:
+                error.configure(text=str(exc.args[0] if exc.args else exc))
+                return
+            win.destroy()
+            self.run()
+
+        ttk.Button(body, text="Use the selected version", style="Small.TButton",
+                   command=roll_back).pack(anchor="w", pady=(6, 0))
 
     # -- songs -------------------------------------------------------------
     def _song_panel(self, kind: str, scale: str) -> None:
@@ -721,8 +836,9 @@ class App(tk.Tk):
         if path:
             data = self.store.export_json(path)
             messagebox.showinfo(
-                "Exported", f"Saved {len(data['songs'])} song suggestion(s) and "
-                f"{len(data['reports'])} report(s) to\n{path}", parent=self)
+                "Exported", f"Saved {len(data['songs'])} song suggestion(s), "
+                f"{len(data['reports'])} report(s) and {len(data['corrections'])} "
+                f"theory correction(s) to\n{path}", parent=self)
 
     def _show_arabic(self, name: str, tonic: str | None, a4: float) -> None:
         key, maqam = arabic.find_maqam(name)
@@ -730,6 +846,7 @@ class App(tk.Tk):
         self._write(f"Maqam {maqam.name}  ·  {maqam.arabic}\n", "title")
         self._write(f"{maqam.description}\nGhammaz (dominant): degree "
                     f"{maqam.ghammaz + 1}\n", "muted")
+        self._theory_card("arabic", key)
         self._write(_equivalents_line("arabic", key) + "\n", "equiv")
         self._song_panel("makam", maqam.makam)
 
