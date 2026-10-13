@@ -107,11 +107,13 @@ Built by `.github/workflows/mobile.yml`:
   "latest", so the desktop download links keep pointing at the desktop
   release.
 
-Android signing: without secrets, each build is signed with a temporary key,
-so installing a newer APK over an older one needs an uninstall first (which
-also clears the phone's songs; export them first). For seamless updates, add
-the repository secrets `MUSTRA_KEYSTORE_BASE64` (a base64-encoded keystore),
-`MUSTRA_KEYSTORE_PASSWORD`, `MUSTRA_KEY_ALIAS` and `MUSTRA_KEY_PASSWORD`.
+Android signing: the APK is signed with MusTra's permanent release key, read
+from the repository secrets `MUSTRA_KEYSTORE_BASE64` (a base64-encoded
+keystore), `MUSTRA_KEYSTORE_PASSWORD`, `MUSTRA_KEY_ALIAS` and
+`MUSTRA_KEY_PASSWORD`, so new versions install as updates. The build checks
+the signature against the certificate's SHA-256 fingerprint
+(`57:EA:20:BC:…:2A:38:78`) and fails if it doesn't match. Builds without the
+secrets (e.g. from forks) fall back to a temporary key.
 
 To try the web app locally:
 
