@@ -18,4 +18,10 @@ The app isn't on Google Play, so Android may show a warning for apps from outsid
 - **Song suggestions** with sources. *Wrong?* lets you give the right dromos/makam and suggest a better song; *Export* shares your contributions through any app.
 - The **Back** button returns to the welcome page; **End** closes the app.
 
-Your songs and corrections are stored in the app. This first Android version is signed with a temporary key, so a future version may need you to uninstall this one first, which deletes your songs. Use *Export* before updating.
+Your songs and corrections are stored in the app.
+
+### Signed with MusTra's permanent key
+
+This APK is signed with MusTra's permanent release key, so future versions install as normal updates and keep your songs. If you installed MusTra for Android before 13 October 2026, that copy was signed with a temporary key: uninstall it once (use *Export* first to keep your songs), then install this one.
+
+Certificate SHA-256: `57:EA:20:BC:61:DE:1F:56:5C:75:E5:64:D6:00:F0:81:DC:53:FA:31:8C:4C:1A:F9:36:E2:6E:C6:87:2A:38:78`

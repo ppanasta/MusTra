@@ -111,6 +111,19 @@ jobs:
             -PversionName="$VERSION" -PversionCode="${{ github.run_number }}"
           cp mobile/android/app/build/outputs/apk/release/app-release.apk MusTra-android.apk
 
+      - name: Check the signature
+        env:
+          # SHA-256 of the MusTra release certificate (public; safe to commit).
+          EXPECTED: 57ea20bc61de1f565c75e564d600f081dc53fa318c4c1af936e26ec6872a3878
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs MusTra-android.apk | tee signers.txt
+          if [ -n "$MUSTRA_KEYSTORE" ]; then
+            grep -q "SHA-256 digest: $EXPECTED" signers.txt \
+              || { echo "::error::The APK is not signed with the MusTra release key."; exit 1; }
+            echo "Signed with the MusTra release key."
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: MusTra-android.apk
